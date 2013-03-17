@@ -983,6 +983,11 @@
 	(cond
 	[(null? adders) 0]
 	[(null? (cdr adders)) (car adders)]
+	[(null? (cddr adders)) 
+		(let ([n (car adders)] [m (cadr adders)])
+		(cond
+		[(and (number? n) (number? m)) (binary+ n m)]
+		[(and (list? n) (list? m)) (binarylist+ n m)]))]
 	[else	(let*
 		([n (car adders)] 
 		[m (cadr adders)]
