@@ -1000,7 +1000,6 @@
 				[else (f [apply methodof+ (list ac (car adders))] [cdr adders])])))]))
 (define (binarylist+ n m)
 	(cond 
-	[(and (null? n) (null? m)) '()]
 	[(and [not (null? n)] [not (null? m)]) 
 		(let f	
 		([ac (cons (+ (car n) (car m)) '())]
@@ -1011,6 +1010,7 @@
 		[(and [not (null? n)] [not (null? m)])
 			(f [cons (car ac) (cons [+ (car n) (car m)] '())] [cdr n] [cdr m])]
 		[else (die '+ "argument not matched" (list n m))]))]
+	[(and (null? n) (null? m)) (die 'binarylist+ "cannot add two empty lists" (list n m))]
 	[else (die '+ "argument not matched" (list n m))]))
 
   (define bitwise-and
