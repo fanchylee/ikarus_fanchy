@@ -979,22 +979,34 @@
            [else (err '* y)])]
         [else (err '* x)])))
    
-  (define +
-    (case-lambda
-      [(x y) (binary+ x y)]
-      [(x y z) (binary+ (binary+ x y) z)]
-      [(a)
-       (cond
-         [(fixnum? a) a]
-         [(number? a) a]
-         [else (die '+ "not a number" a)])]
-      [() 0]
-      [(a b c d . e*)
-       (let f ([ac (binary+ (binary+ (binary+ a b) c) d)]
-               [e* e*])
-         (cond
-           [(null? e*) ac]
-           [else (f (binary+ ac (car e*)) (cdr e*))]))]))
+(define	(+ . adders)
+	(cond
+	[(null? adders) 0]
+	[(null? (cdr adders)) (car adders)]
+	[else	(let*
+		([n (car adders)] 
+		[m (cadr adders)]
+		[methodof+ (cond [(and (number? n) (number? m)) binary+] [(and (list? n) (list? m)) binarylist+] [else (die '+ "not defined" (list n m))])])
+			(let f 
+			([ac (apply methodof+ [list n m])] 
+			[adders (cddr adders)])
+				(cond
+				[(null? adders) ac]
+				[else (f [apply methodof+ (list ac (car adders))] [cdr adders])])))]))
+(define (binarylist+ n m)
+	(cond 
+	[(and (null? n) (null? m)) '()]
+	[(and [not (null? n)] [not (null? m)]) 
+		(let f	
+		([ac (cons (+ (car n) (car m)) '())]
+		[n (cdr n)]
+		[m (cdr m)])
+		(cond
+		[(and (null? n) (null? m)) ac]
+		[(and [not (null? n)] [not (null? m)])
+			(f [cons (car ac) (cons [+ (car n) (car m)] '())] [cdr n] [cdr m])]
+		[else (die '+ "argument not matched" (list n m))]))]
+	[else (die '+ "argument not matched" (list n m))]))
 
   (define bitwise-and
     (case-lambda
