@@ -982,22 +982,24 @@
 (define	(+ . adders)
 	(cond
 	[(null? adders) 0]
-	[(null? (cdr adders)) (car adders)]
+	[(null? (cdr adders)) (binarymethodof+ 0 (car adders))] 
 	[(null? (cddr adders)) 
 		(let ([n (car adders)] [m (cadr adders)])
-		(cond
-		[(and (number? n) (number? m)) (binary+ n m)]
-		[(and (list? n) (list? m)) (binarylist+ n m)]))]
-	[else	(let*
-		([n (car adders)] 
-		[m (cadr adders)]
-		[methodof+ (cond [(and (number? n) (number? m)) binary+] [(and (list? n) (list? m)) binarylist+] [else (die '+ "not defined" (list n m))])])
-			(let f 
-			([ac (apply methodof+ [list n m])] 
-			[adders (cddr adders)])
-				(cond
-				[(null? adders) ac]
-				[else (f [apply methodof+ (list ac (car adders))] [cdr adders])])))]))
+		(binarymethodof+ n m))]
+	[else	(let ([n (car adders)] [m (cadr adders)])
+		(let f 
+		([ac (binarymethodof+ n m)] 
+		[adders (cddr adders)])
+			(cond
+			[(null? adders) ac]
+			[else 	(let ([n ac] [m (car adders)])
+				(f [binarymethodof+ n m] [cdr adders]))])))]))
+(define (binarymethodof+ n m)
+	(cond
+	[(and (number? n) (number? m)) (binary+ n m)] 
+	[(and (list? n) (list? m)) (binarylist+ n m)]
+	[else (die 'binarymethodof+ "not defined" (list n m))]))
+
 (define (binarylist+ n m)
 	(cond 
 	[(and [not (null? n)] [not (null? m)]) 
@@ -1098,6 +1100,7 @@
     (when (< i 0) (err2 i))
     (when (< j i) (err3 i j))
     (bitwise-if (sll (sub1 (sll 1 (- j i))) i) (sll n i) x))
+
 
   (define -
     (case-lambda
