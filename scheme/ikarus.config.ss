@@ -1,0 +1,5 @@
+(define ikarus-version "0.0.4-rc1")
+(define ikarus-revision "1869")
+(define ikarus-lib-dir "/usr/local/lib/ikarus")
+(define target "x86_64-unknown-linux-gnu")
+(define wordsize 8)
