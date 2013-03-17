@@ -982,8 +982,6 @@
 (define	+
 	(case-lambda
 	[(n m) (binarymethodof+ n m)]
-	[(n) (binarymethodof+ 0 n)]
-	[() 0]
 	[(n m . adders)
 		(let f 
 		([ac (binarymethodof+ n m)] 
@@ -991,7 +989,9 @@
 			(cond
 			[(null? adders) ac]
 			[else 	(let ([n ac] [m (car adders)])
-				(f [binarymethodof+ n m] [cdr adders]))]))]))
+				(f [binarymethodof+ n m] [cdr adders]))]))]
+	[(n) (binarymethodof+ 0 n)]
+	[() 0]))
 (define (binarymethodof+ n m)
 	(cond
 	[(and (number? n) (number? m)) (binary+ n m)] 
@@ -1113,21 +1113,20 @@
            [(null? e*) ac]
            [else (f (binary- ac (car e*)) (cdr e*))]))]))
 
-(define	(* . muxers)
-	(cond
-	[(null? muxers) 1]
-	[(null? (cdr muxers)) (binarymethodof* 1 (car muxers))] 
-	[(null? (cddr muxers)) 
-		(let ([n (car muxers)] [m (cadr muxers)])
-		(binarymethodof* n m))]
-	[else	(let ([n (car muxers)] [m (cadr muxers)])
+(define	*
+	(case-lambda
+	[(n m) (binarymethodof* n m)]
+	[(n m . muxers)
 		(let f 
 		([ac (binarymethodof* n m)] 
-		[muxers (cddr muxers)])
+		[muxers  muxers])
 			(cond
 			[(null? muxers) ac]
 			[else 	(let ([n ac] [m (car muxers)])
-				(f [binarymethodof* n m] [cdr muxers]))])))]))
+				(f [binarymethodof* n m] [cdr muxers]))]))]
+	[(n) (binarymethodof* 1 n)]
+	[() 1]))
+
 (define (binarymethodof* n m)
 	(cond
 	[(and (number? n) (number? m)) (binary* n m)] 
