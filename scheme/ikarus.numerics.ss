@@ -979,21 +979,19 @@
            [else (err '* y)])]
         [else (err '* x)])))
    
-(define	(+ . adders)
-	(cond
-	[(null? adders) 0]
-	[(null? (cdr adders)) (binarymethodof+ 0 (car adders))] 
-	[(null? (cddr adders)) 
-		(let ([n (car adders)] [m (cadr adders)])
-		(binarymethodof+ n m))]
-	[else	(let ([n (car adders)] [m (cadr adders)])
+(define	+
+	(case-lambda
+	[(n m) (binarymethodof+ n m)]
+	[(n) (binarymethodof+ 0 n)]
+	[() 0]
+	[(n m . adders)
 		(let f 
 		([ac (binarymethodof+ n m)] 
-		[adders (cddr adders)])
+		[adders adders])
 			(cond
 			[(null? adders) ac]
 			[else 	(let ([n ac] [m (car adders)])
-				(f [binarymethodof+ n m] [cdr adders]))])))]))
+				(f [binarymethodof+ n m] [cdr adders]))]))]))
 (define (binarymethodof+ n m)
 	(cond
 	[(and (number? n) (number? m)) (binary+ n m)] 
