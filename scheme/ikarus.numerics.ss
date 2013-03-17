@@ -997,6 +997,7 @@
 (define (binarymethodof+ n m)
 	(cond
 	[(and (number? n) (number? m)) (binary+ n m)] 
+	[(or (null? n) (null? m)) (die 'binarymethodof* "the argument cannot be empty list" (list n m))]
 	[(and (list? n) (list? m)) (binarylist+ n m)]
 	[else (die 'binarymethodof+ "not defined" (list n m))]))
 
@@ -1114,22 +1115,53 @@
            [(null? e*) ac]
            [else (f (binary- ac (car e*)) (cdr e*))]))]))
 
-  (define *
-    (case-lambda
-      [(x y) (binary* x y)]
-      [(x y z) (binary* (binary* x y) z)]
-      [(a)
-       (cond
-         [(fixnum? a) a]
-         [(number? a) a]
-         [else (die '* "not a number" a)])]
-      [() 1]
-      [(a b c d . e*)
-       (let f ([ac (binary* (binary* (binary* a b) c) d)]
-               [e* e*])
-         (cond
-           [(null? e*) ac]
-           [else (f (binary* ac (car e*)) (cdr e*))]))]))
+(define	(* . muxers)
+	(cond
+	[(null? muxers) 1]
+	[(null? (cdr muxers)) (binarymethodof* 1 (car muxers))] 
+	[(null? (cddr muxers)) 
+		(let ([n (car muxers)] [m (cadr muxers)])
+		(binarymethodof* n m))]
+	[else	(let ([n (car muxers)] [m (cadr muxers)])
+		(let f 
+		([ac (binarymethodof* n m)] 
+		[muxers (cddr muxers)])
+			(cond
+			[(null? muxers) ac]
+			[else 	(let ([n ac] [m (car muxers)])
+				(f [binarymethodof* n m] [cdr muxers]))])))]))
+(define (binarymethodof* n m)
+	(cond
+	[(and (number? n) (number? m)) (binary* n m)] 
+	[(or (null? n) (null? m)) (die 'binarymethodof* "the argument cannot be empty list" (list n m))]
+	[(and (number? n) (list? m)) (scale* n m)]
+	[(and (number? m) (list? n)) (scale* m n)]
+	[else (die 'binarymethodof* "not defined" (list n m))]))
+
+(define (scale* n m)
+	;(if (not (number? n)) (die 'scale* "first argument must be number" n))
+	;(if (or (null? m) (not (list? m))) (die 'scale* "second argument should be nonempty list" m))
+	(let f ([ac (cons (binarymethodof* n (car m)) '())] [m (cdr m)])
+		(cond
+		[(null? m) ac]
+		[else (f (cons (car ac) [cons (binarymethodof* n (car m)) '()]) [cdr m])])))
+
+(define (binarylistdot* n m)
+	(cond 
+	[(and [not (null? n)] [not (null? m)]) 
+		(let f	
+		([ac (cons (* (car n) (car m)) '())]
+		[n (cdr n)]
+		[m (cdr m)])
+		(cond
+		[(and (null? n) (null? m)) ac]
+		[(and [not (null? n)] [not (null? m)])
+			(f [cons (car ac) (cons [* (car n) (car m)] '())] [cdr n] [cdr m])]
+		[else (die 'binarylistdot* "argument not matched" (list n m))]))]
+	[(and (null? n) (null? m)) (die 'binarylistdot* "cannot add two empty lists" (list n m))]
+	[else (die 'binarylistdot* "argument not matched" (list n m))]))
+
+
 
   (define (binary-gcd x y) 
     (define (gcd x y)
