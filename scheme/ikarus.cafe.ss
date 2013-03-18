@@ -86,6 +86,7 @@ description:
                  (lambda ()
                    (read (console-input-port))))])
         (cond
+		;;;here is the function [when press Ctrl-D , (exit)]
           [(eof-object? x) 
            (newline (console-output-port))
            (escape-k (void))]

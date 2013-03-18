@@ -26,7 +26,11 @@
       (with-input-from-file file-name 
         (lambda () 
           (let ([x (get-string-all (current-input-port))])
-            (if (eof-object? x) "" x))))
+            ;(if (eof-object? x) "" x)
+		(cond
+		[(eof-object? x) ""]
+		[else x]
+		))))
       file-name))
 
   (define (read-library-source-file file-name)
