@@ -375,6 +375,9 @@ int main(int argc, char** argv){
 		fprintf(stderr, "Fork error\n");
 	}
 	if(child_pid == 0){ // child process
+		dup2(my_pipe[0], STDIN_FILENO);
+		dup2(my_pipe[1], STDOUT_FILENO);
+		execlp("ikarus", "ikarus", "--quiet", NULL);
 	}else{
 		while(1){
 		//	updateCUR();
