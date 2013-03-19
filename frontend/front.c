@@ -21,9 +21,23 @@
 #define CLRtoEND()	{putchar(ESC);\
 			putchar('[');\
 			putchar('K');}
-
+#define saveCUR()	{putchar(ESC);\
+			putchar('[');\
+			putchar('s');}
+#define restoreCUR()	{putchar(ESC);\
+			putchar('[');\
+			putchar('u');}
+#define leftCUR()	{putchar(ESC);\
+			putchar('[');\
+			putchar('D');}
+#define rightCUR()	{putchar(ESC);\
+			putchar('[');\
+			putchar('C');}
 #define CtrlD EOT
 #define CtrlC ETX
+
+#define UTF8TRAILING(ch)	((((ch)>>6) & 0x0003) == 0x02)
+#define UTF8LEADING(ch,no)	((ch & ((0xFF00 >> ((no)+1)) & 0x00FF) ) == ((0xFF00 >> (no)) & 0x00FF))
 
 typedef struct _exchar{
 	char ch;
@@ -41,18 +55,82 @@ typedef struct _exexpr{
 struct termios * original_ter;
 struct termios * newter;
 exexpr * cur_expr ;
-
-int backspace(){
+int left(int no){
+	exchar* curpoint ;
+	unsigned char ch;
+	if( cur_expr->len > cur_expr->position){
+		cur_expr->position += 1;
+		curpoint = cur_expr->ech + cur_expr->len - cur_expr->position;
+		ch = curpoint->ch ;
+	}else{
+		return 0 ;
+	}
+	if(UTF8TRAILING(ch)){
+		left(no+1);
+	}else{
+		if(UTF8LEADING(ch,no) ) {
+			leftCUR();
+		}
+		leftCUR();
+	}
+	return 0 ;
+}
+int right(int no){
+	exchar* curpoint ;
+	unsigned char ch = '\0';
+	if( cur_expr->position > 0){
+		cur_expr->position -= 1;
+		curpoint = cur_expr->ech + cur_expr->len - cur_expr->position;
+		ch = curpoint->ch ;
+	}else{
+		return 0;
+	}
+	
+/*
+	if(UTF8TRAILING(ch)){
+		right(no+1);
+	}else{
+		if(UTF8LEADING(ch,no) ) {
+			rightCUR();
+		}
+		rightCUR();
+	}	
+*/
+	return 0;
+}
+int backspace(int no){
+	unsigned char ch ;
 	if( cur_expr->len > cur_expr->position){
 		exchar* src = cur_expr->ech + cur_expr->len - cur_expr->position;
+		ch = (src-1)->ch ;
 		memmove(src - 1, src, (cur_expr->position+1) * sizeof(exchar)) ;
 		cur_expr->len -= 1;
 		cur_expr->ech = realloc(cur_expr->ech, (cur_expr->len+1)*sizeof(exchar));
-		BS();
-		CLRtoEND();
-		if(cur_expr->position != 0){
+	}else{
+		return 0;
+	}
+	if(UTF8TRAILING(ch)){
+		backspace(no+1) ;
+	}else{
+		if(UTF8LEADING(ch,no) ) {
+			BS();//for double location
+		}
+		{
+			BS();
+			CLRtoEND();
+			if(cur_expr->position != 0){
+				exchar* startpoint ;
+				saveCUR();
+				startpoint = cur_expr->ech + cur_expr->len - cur_expr->position ;
+				while(startpoint->ch != '\0'){
+					putchar(ch);
+					startpoint = startpoint + 1;
+				}
+				restoreCUR();
+			}	
 		}
 	}
+	return 0;
 }
 int valid_char(char ch){
 	if(cur_expr->position == 0) {
@@ -61,6 +139,7 @@ int valid_char(char ch){
 		cur_expr->ech = realloc(cur_expr->ech, (cur_expr->len+1)*sizeof(exchar));
 		cur_expr->ech[cur_expr->len].ch = '\0' ;
 	}
+//	fprintf(stderr, "len:%d ", cur_expr->len ); 
 }
 int main(int argc, char** argv){
 	char c;
@@ -105,7 +184,7 @@ int main(int argc, char** argv){
 			break;
 			
 			case '\x7F':
-			backspace();
+			backspace(1);
 			break;
 			
 			case ESC:
@@ -114,7 +193,7 @@ int main(int argc, char** argv){
 			
 			default:
 			valid_char(c);
-			printf("%x ", c);
+			printf("%c", c);
 			break;
 			}
 		}
@@ -189,15 +268,13 @@ int escape(){
 		
 		case '\x43':
 		if(chbuf[state-1] == '['){
-//			right ();
-			printf("right ");
+			right(1);
 		}
 		break;
 		
 		case '\x44':
 		if(chbuf[state-1] == '['){
-//			left ();
-			printf("left ");
+			left (1);
 		}
 		break;
 		
