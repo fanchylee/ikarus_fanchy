@@ -19,6 +19,7 @@
 #define BACKspace	("\x1B\x5B\x31\x44")
 #define CURhide		("\x1B[?25l")
 #define CURshow		("\x1B[?25h")
+#define noLINEwrap	("\x1B[7l")
 
 
 #define ETX ((char)0x03)
@@ -30,6 +31,7 @@
 #define restoreCUR()	{write(1, CURrestore, sizeof(CURrestore));}
 #define leftCUR()	{write(1, CURleft, sizeof(CURleft));}
 #define rightCUR()	{write(1, CURright, sizeof(CURright));}
+#define offlineWRAP()	{write(1, noLINEwrap, sizeof(noLINEwrap));}
 #define CtrlD EOT
 #define CtrlC ETX
 
@@ -52,13 +54,87 @@ typedef struct _exexpr{
 	exchar *ech ;
 	int position ;
 	int len ;
-	int cur_start;
+	curP cur_start;
+	curP cur_cur ;
 } exexpr ;
 
 struct termios * original_ter;
 struct termios * newter;
 exexpr * cur_expr ;
 curP win ;
+void updatewin(){
+	struct winsize w;
+	ioctl(0, TIOCGWINSZ, &w);
+	win.x = w.ws_col;
+	win.y = w.ws_row ;
+}
+curP getCUR(){
+	char buf[12];
+	int y,x,i,xp,yp;
+	curP cur ;
+	write(STDOUT_FILENO, CURposition, sizeof(CURposition));
+	for(i = 0;i < 12; i++){
+		read(STDIN_FILENO, buf + i, 1);
+		if(buf[i] == '['){
+			yp = i + 1;
+		}else if(buf[i] == ';'){
+			buf[i] = '\0';
+			xp = i + 1 ;
+		}else if(buf[i] == 'R'){
+			buf[i] = '\0';
+			break;
+		}
+	}
+	x = atoi(buf + xp) ;
+	y = atoi(buf + yp) ;
+	{cur.x=x;cur.y=y;};
+	return cur;
+}
+curP initcurP(){
+	updatewin();
+	if(cur_expr->len == 0 ){
+		return getCUR();
+	}
+}
+curP makecurP(){
+	int i = 0;
+	int acx = 0;
+	int acy = 0;
+	char ch ;
+	curP new ;
+	updatewin();
+	
+	while((ch = cur_expr->ech[i].ch ) != '\0' && i < cur_expr->len-cur_expr->position ){
+		if((ch & 0x80) == 0){
+			cur_expr->ech[i].curwidth = 1 ;
+		}else if(UTF8TRAILING(ch)){
+			cur_expr->ech[i].curwidth = 0 ;
+		}else if(cur_expr->ech[i].curwidth == 0){
+			cur_expr->ech[i].curwidth = getwidth(cur_expr->ech + i) ;
+		}
+		acx = acx + cur_expr->ech[i].curwidth;
+		if(acx + cur_expr->cur_start.x - 1== win.x){
+			acx = 0 ;
+			if(acy + cur_expr->cur_start.y< win.y){
+				acy = acy + 1;
+			}
+		}else if(acx + cur_expr->cur_start.x - 1> win.x){
+			acx = cur_expr->ech[i].curwidth ;
+			if(acy + cur_expr->cur_start.y < win.y){
+				acy = acy + 1;
+			}
+		}
+		i = i + 1 ;
+	}
+	if(acy == 0){
+		new.x = acx + cur_expr->cur_start.x;
+	}else{
+		new.x = acx + 1;
+	}
+	new.y = acy + cur_expr->cur_start.y;
+	return new;
+	
+}
 void CURmoveleft(int x){
 	char buf[12];
 	char xch[5];
@@ -98,27 +174,10 @@ int utf8bytes(char ch){
 		no += 1;
 	}
 }
-curP getCUR(){
-	char buf[12];
-	int y,x,i,xp,yp;
-	curP cur ;
-	write(STDOUT_FILENO, CURposition, sizeof(CURposition));
-	for(i = 0;i < 12; i++){
-		read(STDIN_FILENO, buf + i, 1);
-		if(buf[i] == '['){
-			yp = i + 1;
-		}else if(buf[i] == ';'){
-			buf[i] = '\0';
-			xp = i + 1 ;
-		}else if(buf[i] == 'R'){
-			buf[i] = '\0';
-			break;
-		}
-	}
-	x = atoi(buf + xp) ;
-	y = atoi(buf + yp) ;
-	{cur.x=x;cur.y=y;};
-	return cur;
+
+
+int home(){
+	while(left(1) != -1);
 }
 int left(int no){
 	exchar* curpoint ;
@@ -137,8 +196,11 @@ int left(int no){
 		}
 		return 0 ;
 	}else{
-		return 0 ;
+		return -1 ;
 	}
+}
+int end(){
+	while(right() != -1);
 }
 int right(){
 	exchar* curpoint ;
@@ -157,7 +219,7 @@ int right(){
 		}
 		return 0;
 	}else{
-		return 0;
+		return -1;
 	}
 }
 /*
@@ -202,23 +264,6 @@ int backspace(int no){
 		if(UTF8TRAILING(ch)){
 			backspace(no+1) ;
 		}else{
-			{
-			//	CLRtoEND();
-				/*
-				if(cur_expr->position != 0){//error
-					exchar* startpoint ;
-					curP oldp, newp ;
-					oldp = getCUR() ;
-					startpoint = cur_expr->ech + cur_expr->len - cur_expr->position ;
-	//				putchar('\n');putchar('\r');
-					while(startpoint->ch != '\0'){
-						putchar(startpoint->ch);
-						startpoint = startpoint + 1;
-					}
-					CURmoveto(oldp.x, oldp.y);
-				}	
-				*/
-			}
 			if(curpoint->curwidth == 0){
 				curpoint->curwidth = getwidth(curpoint);
 			}
@@ -227,7 +272,6 @@ int backspace(int no){
 				BS();
 			}
 			CLRtoEND();
-			
 		}
 	}else{
 		return 0;
@@ -235,12 +279,7 @@ int backspace(int no){
 	
 	return 0;
 }
-void updatewin(){
-	struct winsize w;
-	ioctl(0, TIOCGWINSZ, &w);
-	win.x = w.ws_col;
-	win.y = w.ws_row ;
-}
+
 int getwidth(exchar* utf8leading ){
 	char buf[6];
 	int i = 1;
@@ -262,17 +301,7 @@ int getwidth(exchar* utf8leading ){
 	}
 }
 int valid_char(char ch){
-	curP newp ;
 	printf("%c", ch);
-//	fprintf(stderr, " x:%d;y:%d", oldp.x, oldp.y);
-/*
-	if(cur_expr->len > 0){
-		cur_expr->ech[cur_expr->len - 1].curwidth = getwidth(oldp, newp);
-		oldp = newp ;
-	}else {
-		oldp = newp ;
-	}
-*/
 	if(cur_expr->position == 0) {
 		cur_expr->ech[cur_expr->len].ch = ch ;
 		if((ch & 0x80) == 0){ //ASCII
@@ -301,27 +330,36 @@ int valid_char(char ch){
 	}
 //	fprintf(stderr, "len:%d ", cur_expr->len ); 
 }
+void updateCUR(){
+	curP cur = cur_expr->cur_cur;
+	curP now = getCUR();
+	if(cur.x != now.x || cur.y != now.y){
+		CURmoveto(cur.x, cur.y);
+	}
+}
 int main(int argc, char** argv){
 	char c;
 	newter=(struct termios *)malloc(sizeof(struct termios)) ;
 	original_ter=(struct termios *)malloc(sizeof(struct termios)) ;
+	
+	tcgetattr(STDIN_FILENO, original_ter);
+	cfmakeraw(newter);
+	//newter->c_lflag |= ICANON ;
+	tcsetattr(STDIN_FILENO, TCSANOW, newter);
+//	tcsetattr(STDIN_FILENO, TCSANOW, original_ter);
+	setvbuf(stdin,NULL,_IONBF,0);
+	
+	updatewin();
 	{
 		cur_expr = (exexpr*)malloc(sizeof(exexpr));
 		cur_expr->len = 0 ;
 		cur_expr->position = 0 ;
 		cur_expr->ech = (exchar*)malloc(sizeof(exchar));
 		cur_expr->ech[0].ch = '\0';
-		cur_expr->cur_start = 0 ;
+		cur_expr->cur_start = initcurP() ;
+		cur_expr->cur_cur = cur_expr->cur_start ;
 	}
 
-	tcgetattr(STDIN_FILENO, original_ter);
-	cfmakeraw(newter);
-	//newter->c_lflag |=  ;
-	tcsetattr(STDIN_FILENO, TCSANOW, newter);
-//	tcsetattr(STDIN_FILENO, TCSANOW, original_ter);
-	setvbuf(stdin,NULL,_IONBF,0);
-	
-	updatewin();
 
 	int my_pipe[2];
 	if(pipe(my_pipe) == -1)
@@ -339,6 +377,7 @@ int main(int argc, char** argv){
 	if(child_pid == 0){ // child process
 	}else{
 		while(1){
+		//	updateCUR();
 			c=getchar();
 			switch(c){
 			case EOT:
@@ -347,6 +386,7 @@ int main(int argc, char** argv){
 			
 			case '\x7F':
 			backspace(1);
+			cur_expr->cur_cur = makecurP();
 			break;
 			
 			case ESC:
@@ -355,6 +395,7 @@ int main(int argc, char** argv){
 			
 			default:
 			valid_char(c);
+			cur_expr->cur_cur = makecurP();
 			break;
 			}
 		}
@@ -407,7 +448,9 @@ int escape(){
 
 	case 1:
 		switch(c){
+		case '1':
 		case '3':
+		case '4':
 		chbuf[state]= c ;
 		state = 2;
 		escape();
@@ -430,26 +473,28 @@ int escape(){
 		case '\x43':
 		if(chbuf[state-1] == '['){
 			right();
+			cur_expr->cur_cur = makecurP();
 		}
 		break;
 		
 		case '\x44':
 		if(chbuf[state-1] == '['){
 			left (1);
+			cur_expr->cur_cur = makecurP();
 		}
 		break;
 		
 		case '\x46':
 		if(chbuf[state-1] == 'O'){
-//			end ();
-			printf("end ");
+			end ();
+			cur_expr->cur_cur = makecurP();
 		}
 		break;
 
 		case '\x48':
 		if(chbuf[state-1] == 'O'){
-//			end ();
-			printf("home ");
+			home ();
+			cur_expr->cur_cur = makecurP();
 		}
 		break;
 		}
@@ -461,6 +506,12 @@ int escape(){
 		if(chbuf[state-1] == '3' && chbuf[state-2] == '['){
 //			delete() ;
 			printf("del ");
+		}else if(chbuf[state-1]=='4'&&chbuf[state-2]== '['){
+			end();
+			cur_expr->cur_cur = makecurP();
+		}else if(chbuf[state-1]=='1'&&chbuf[state-2]== '['){
+			home();
+			cur_expr->cur_cur = makecurP();
 		}
 		break;
 		}
