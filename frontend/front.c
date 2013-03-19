@@ -1,3 +1,5 @@
+#include <sys/types.h>
+#include <signal.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
@@ -62,6 +64,7 @@ struct termios * original_ter;
 struct termios * newter;
 exexpr * cur_expr ;
 curP win ;
+pid_t child_pid;
 void updatewin(){
 	struct winsize w;
 	ioctl(0, TIOCGWINSZ, &w);
@@ -368,7 +371,6 @@ int main(int argc, char** argv){
 	}
 
 	
-	pid_t child_pid;
 	child_pid = fork();
 	if(child_pid == -1)
 	{
@@ -426,6 +428,8 @@ int safe_exit(){
 	tcsetattr(STDIN_FILENO, TCSANOW, original_ter);
 	free(original_ter);
 	free(newter);
+
+	kill(child_pid, SIGTERM);
 	exit(0);
 }
 int escape(){
