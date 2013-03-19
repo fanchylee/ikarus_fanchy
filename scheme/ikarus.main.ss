@@ -93,7 +93,7 @@
       (define (invalid-rc-error)
         (die 'ikarus "--no-rcfile is invalid with --rcfile"))
       (cond
-        [(null? args) (values '() #f #f '() k)]
+        [(null? args) (values '() #f #f '() k #t)]
         [(member (car args) '("-d" "--debug"))
          (f (cdr args) (lambda () (k) (generate-debug-calls #t)))]
         [(member (car args) '("-nd" "--no-debug"))
@@ -119,36 +119,38 @@
                  [else rcfiles])))
            (f (cdr d) k))]
         [(string=? (car args) "--")
-         (values '() #f #f (cdr args) k)]
+         (values '() #f #f (cdr args) k #t) ]
+	[(string=? (car args) "--quiet")
+	 (values '() #f #f (cdr args) k #f) ]
         [(string=? (car args) "--script")
          (let ([d (cdr args)])
            (cond
              [(null? d) (die 'ikarus "--script requires a script name")]
-             [else (values '() (car d) 'script (cdr d) k)]))]
+             [else (values '() (car d) 'script (cdr d) k #t) ]))]
         [(string=? (car args) "--r6rs-script")
          (let ([d (cdr args)])
            (cond
              [(null? d) (die 'ikarus "--r6rs-script requires a script name")]
-             [else (values '() (car d) 'r6rs-script (cdr d) k)]))]
+             [else (values '() (car d) 'r6rs-script (cdr d) k #t) ]))]
         [(string=? (car args) "--r6rs-repl")
          (let ([d (cdr args)])
            (cond
              [(null? d) (die 'ikarus "--r6rs-repl requires a script name")]
-             [else (values '() (car d) 'r6rs-repl (cdr d) k)]))]
+             [else (values '() (car d) 'r6rs-repl (cdr d) k #t)]))]
         [(string=? (car args) "--compile-dependencies")
          (let ([d (cdr args)])
            (cond
              [(null? d)
               (die 'ikarus "--compile-dependencies requires a script name")]
              [else
-              (values '() (car d) 'compile (cdr d) k)]))]
+              (values '() (car d) 'compile (cdr d) k #t)]))]
         [else
          (let-values ([(f* script script-type a* k) (f (cdr args) k)])
-           (values (cons (car args) f*) script script-type a* k))])))
+           (values (cons (car args) f*) script script-type a* k #t))])))
 
   (initialize-symbol-table!)
   (init-library-path)
-  (let-values ([(files script script-type args init-command-line-args)
+  (let-values ([(files script script-type args init-command-line-args quiet)
                 (parse-command-line-arguments)])
 
     (define (assert-null files who)
@@ -213,7 +215,7 @@
          (cond
            [(eq? script-type 'r6rs-script) (f)]
            [else
-            (print-greeting)
+            (if quiet (print-greeting))
             (let ([env (f)])
               (interaction-environment env)
               (new-cafe
@@ -230,7 +232,7 @@
          (for-each load files)
          (load script))]
       [else
-       (print-greeting)
+       (if quiet (print-greeting))
        (command-line-arguments (cons "*interactive*" args))
        (doit (for-each load files))
        (new-cafe

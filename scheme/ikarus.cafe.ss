@@ -45,8 +45,10 @@ description:
 
   (define eval-depth 0)
 
+  (define prompt-string "");;original ">"
+  (define prompt-string2 "");;original " "
   (define waiter-prompt-string
-    (make-parameter ">"
+    (make-parameter prompt-string
       (lambda (x)
         (if (string? x)
             x
@@ -55,7 +57,7 @@ description:
   (define display-prompt
     (lambda (i)
       (if (fx= i eval-depth)
-          (display " " (console-output-port))
+          (display prompt-string2 (console-output-port))
           (begin
             (display (waiter-prompt-string) (console-output-port))
             (display-prompt (fx+ i 1))))))
