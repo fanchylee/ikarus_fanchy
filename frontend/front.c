@@ -404,6 +404,9 @@ int valid_char(char ch){
 	}
 }
 int utf8_valid_char(char ch){
+	exchar* tpoint ;
+	exchar* curpoint ;
+	int dx,dy ;
 	int i ;
 	static curP op ={-1,-1};
 	curP p ;
@@ -427,37 +430,18 @@ int utf8_valid_char(char ch){
 	}
 	curbefore = cur_expr->ech + cur_expr->len - cur_expr->position - utf8bytes(ch);
 	curbefore->curwidth = getwidth(curbefore) ; 
+	tpoint = curbefore ;
+	for(curpoint = curbefore + 1;UTF8TRAILING(curpoint->ch); curpoint ++);
 	if(curbefore == cur_expr->ech){
 		curbefore->xoffset = curbefore->yoffset = 0  ;
-	}/*else{
-		exchar* last ;
-		for(last = curbefore - 1; UTF8TRAILING(last->ch); last --);
-		
-		if(updatewin().x - last->xoffset < 5){
-			curbefore->xoffset = 0;
-			curbefore->yoffset = last->yoffset + 1 ;
-	//		fwrite("\n\r", sizeof("\n\r"), 1, stdout);	
-		}else{
-			curbefore->xoffset = last->curwidth + last->xoffset;
-		}
-			
-		
-	}*/
-	else{
-	//exchar* next ;
-		exchar* tpoint ;
-		exchar* curpoint ;
-		int dx,dy ;
-		for(curpoint = curbefore + 1;UTF8TRAILING(curpoint->ch); curpoint ++);
-//	for(next = curbefore - 1; UTF8TRAILING(next->ch); next --);
-		tpoint = curbefore ;
+		tpoint = curpoint ;
+	}{
 		while(1){
 			exchar* tlast ;
 			for(tlast = tpoint - 1;UTF8TRAILING(tlast->ch); tlast --);
 			if(updatewin().x - tlast->xoffset < 5){
 				tpoint->xoffset = 0;
 				tpoint->yoffset = tlast->yoffset + 1 ;
-	//			fwrite("\n\r", sizeof("\n\r"), 1, stdout);	
 			}else{
 				tpoint->xoffset = tlast->curwidth + tlast->xoffset;
 				tpoint->yoffset = tlast->yoffset ;
@@ -476,9 +460,6 @@ int utf8_valid_char(char ch){
 		dx = curpoint->xoffset - tpoint->xoffset ;
 		dy = curpoint->yoffset - tpoint->yoffset ;
 		CURmove(dx,dy);
-		//for(fwrite(
-	//	if(cur_expr->position != 0){
-	//	}
 	}
 	/*
 	if(op.x < 0){
