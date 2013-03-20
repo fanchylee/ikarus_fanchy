@@ -134,32 +134,6 @@ curP getCUR(){
 	free(buf);
 	return cur;
 }
-/*
-curP getCUR(){
-	char buf[12];
-	char *curposition = "\x1B[6n";
-	int y,x,i,xp,yp,n;
-	curP cur ;
-	n = fwrite(curposition, strlen(curposition),1,stdout);
-	for(i = 0;i < 12; i++){
-		buf[i]=getchar();
-		if(buf[i] == '['){
-			yp = i + 1;
-		}else if(buf[i] == ';'){
-			buf[i] = '\0';
-			xp = i + 1 ;
-		}else if(buf[i] == 'R'){
-			buf[i] = '\0';
-			break;
-		}
-	}
-	x = atoi(buf + xp) ;
-	y = atoi(buf + yp) ;
-	{cur.x=x;cur.y=y;};
-	return cur;
-}
-*/
-
 curP initcurP(){
 	updatewin();
 	if(cur_expr->len == 0 ){
@@ -330,23 +304,6 @@ int backspace(int no){
 		if(UTF8TRAILING(ch)){
 			backspace(no+1) ;
 		}else{
-			{
-			//	CLRtoEND();
-				/*
-				if(cur_expr->position != 0){//error
-					exchar* startpoint ;
-					curP oldp, newp ;
-					oldp = getCUR() ;
-					startpoint = cur_expr->ech + cur_expr->len - cur_expr->position ;
-	//				putchar('\n');putchar('\r');
-					while(startpoint->ch != '\0'){
-						putchar(startpoint->ch);
-						startpoint = startpoint + 1;
-					}
-					CURmoveto(oldp.x, oldp.y);
-				}	
-				*/
-			}
 			if(curpoint->curwidth == 0){
 				curpoint->curwidth = getwidth(curpoint);
 			}
@@ -461,24 +418,6 @@ int utf8_valid_char(char ch){
 		dy = curpoint->yoffset - tpoint->yoffset ;
 		CURmove(dx,dy);
 	}
-	/*
-	if(op.x < 0){
-		op = cur_expr->cur_start;
-		p = getCUR();
-		if(p.x - op.x > 0){
-			curpoint->curwidth = p.x - op.x ;
-			curpoint->curp = p ;
-		}	
-		op = p;
-	}else{
-		p = getCUR();
-		if(p.x - op.x > 0){
-			curpoint->curwidth = p.x - op.x ;
-			curpoint->curp = op ;
-		}	
-		op = p ;
-	}
-*/
 }
 
 int main(int argc, char** argv){
@@ -489,9 +428,7 @@ int main(int argc, char** argv){
 
 	tcgetattr(STDIN_FILENO, original_ter);
 	cfmakeraw(newter);
-	//newter->c_lflag |=  ;
 	tcsetattr(STDIN_FILENO, TCSANOW, newter);
-//	tcsetattr(STDIN_FILENO, TCSANOW, original_ter);
 	setvbuf(stdin,NULL,_IONBF,0);
 	{
 		cur_expr = (exexpr*)malloc(sizeof(exexpr));
