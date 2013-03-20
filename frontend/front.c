@@ -32,11 +32,12 @@
 #define restoreCUR()	{fwrite( CURrestore, sizeof(CURrestore),1,stdout);}
 #define leftCUR()	{fwrite( CURleft, sizeof(CURleft),1,stdout);}
 #define rightCUR()	{fwrite( CURright, sizeof(CURright),1,stdout);}
+#define upCUR()		{fwrite( CURup, sizeof(CURup),1,stdout);}
 #define CtrlD EOT
 #define CtrlC ETX
 
 #define UTF8TRAILING(ch)	((((ch)>>6) & 0x0003) == 0x02)
-#define UTF8LEADING(ch,no)	((ch & ((0xFF00 >> ((no)+1)) & 0x00FF) ) == ((0xFF00 >> (no)) & 0x00FF))
+#define UTF8LEADING(ch,no)      (((ch) & ((0xFF00 >> ((no)+1)) & 0x00FF) ) == ((0xFF00 >> (no)) & 0x00FF))
 
 typedef struct _curP{
 	int x ;
@@ -46,6 +47,8 @@ typedef struct _exchar{
 	char ch;
 	char color;
 	unsigned char curwidth;
+	unsigned int xoffset ;
+	unsigned int yoffset ;
 } exchar;
 
 typedef struct _exexpr{
@@ -62,12 +65,76 @@ struct termios * newter;
 exexpr * cur_expr ;
 curP win ;
 pid_t child_pid;
-void updatewin(){
+
+curP updatewin(){
 	struct winsize w;
 	ioctl(0, TIOCGWINSZ, &w);
 	win.x = w.ws_col;
 	win.y = w.ws_row ;
+	return win ;
 }
+curP getCUR(){
+	char *buf = NULL;
+	char *curposition = "\x1B[6n";
+	int y,x,i,xp,yp,ep,n,escaped = 0,braketed = 0,coloned = 0,xnumed = 0,ynumed = 0;
+	curP cur ;
+	n = fwrite(curposition, strlen(curposition),1,stdout);
+	for(i = 0; ; i++){
+		buf = realloc(buf, sizeof(i+1));
+		buf[i]=getchar();
+		if((xnumed && coloned && ynumed && braketed && escaped) == 1){
+			if(buf[i] >= '0' && buf[i] <= '9'){
+			}else if(buf[i] == 'R'){
+				buf[i] = '\0';
+				break ;
+			}else {
+				xnumed = coloned = ynumed = braketed = escaped = 0 ;
+			}
+		}else if((coloned && ynumed && braketed && escaped) == 1){
+			if(buf[i] >= '0' && buf[i] <= '9'){
+				xnumed = 1 ;
+				xp = i ;
+			}else {
+				coloned = ynumed = braketed = escaped = 0 ;
+			}
+		}else if((ynumed && braketed && escaped) == 1){
+			if(buf[i] >= '0' && buf[i] <= '9'){
+			}else if(buf[i] == ';'){
+				coloned = 1;
+			}else {
+				ynumed = braketed = escaped = 0 ;
+			}
+		}else if((braketed && escaped) == 1){
+			if(buf[i] >= '0' && buf[i] <= '9'){
+				ynumed = 1;
+				yp = i ;
+			}else{
+				braketed = escaped = 0 ;
+			}
+		}else if( escaped == 1){
+			if(buf[i] == '['){
+				braketed = 1;
+			}else{
+				escaped = 0 ;
+			}
+		}else if(escaped == 0){
+			if(buf[i] == '\x1B'){
+				escaped = 1;
+				ep = i ;
+			}
+		}
+	}
+	buf[xp - 1] = '\0' ;
+	x = atoi(buf + xp) ;
+	y = atoi(buf + yp) ;
+	{cur.x=x;cur.y=y;};
+	for(i = ep - 1; i >= 0; i -- ){
+		ungetc(buf[i],stdin);
+	}
+	free(buf);
+	return cur;
+}
+/*
 curP getCUR(){
 	char buf[12];
 	char *curposition = "\x1B[6n";
@@ -91,6 +158,8 @@ curP getCUR(){
 	{cur.x=x;cur.y=y;};
 	return cur;
 }
+*/
+
 curP initcurP(){
 	updatewin();
 	if(cur_expr->len == 0 ){
@@ -256,22 +325,29 @@ int getwidth(exchar* utf8leading ){
 	}
 }
 int valid_char(char ch){
-	curP p ;
 	fwrite(&ch, 1,1,stdout);
+	exchar* curpoint = cur_expr->ech + cur_expr->len - cur_expr->position;
 	if(cur_expr->position == 0) {
 		cur_expr->ech[cur_expr->len].ch = ch ;
-		if((ch & 0x80) == 0){ //ASCII
-			cur_expr->ech[cur_expr->len].curwidth = 1; 
-		}else {
-			cur_expr->ech[cur_expr->len].curwidth = 0;
-		}
 		cur_expr->len += 1;
 		cur_expr->ech = realloc(cur_expr->ech, (cur_expr->len+1)*sizeof(exchar));
 		cur_expr->ech[cur_expr->len].ch = '\0' ;
+	}else{
+		cur_expr->len += 1;
+		cur_expr->ech = realloc(cur_expr->ech, (cur_expr->len+1)*sizeof(exchar));
+		memmove(curpoint + 1, curpoint ,sizeof(exchar)*(cur_expr->position+1));
+		curpoint->ch = ch ;
+		cur_expr->ech[cur_expr->len].ch = '\0' ;
+	}
+	if(UTF8TRAILING(ch)){
+		curpoint->color = curpoint->curwidth = curpoint->xoffset = curpoint->yoffset = 0 ;
 	}
 }
 int utf8_valid_char(char ch){
 	int i ;
+	static curP op ={-1,-1};
+	curP p ;
+	exchar *curpoint;
 	switch(utf8bytes(ch)){
 	case 1:
 	valid_char(ch);
@@ -289,6 +365,59 @@ int utf8_valid_char(char ch){
 	}
 	break;
 	}
+	curpoint = cur_expr->ech + cur_expr->len - cur_expr->position - utf8bytes(ch);
+	curpoint->curwidth = getwidth(curpoint) ; 
+	if(curpoint == cur_expr->ech){
+		curpoint->xoffset = curpoint->yoffset = 0  ;
+	}else{
+		exchar* last ;
+		for(last = curpoint - 1; UTF8TRAILING(last->ch); last --);
+		
+		if(updatewin().x - last->xoffset < 5){
+			curpoint->xoffset = 0;
+			curpoint->yoffset = last->yoffset + 1 ;
+			fwrite("\n\r", sizeof("\n\r"), 1, stdout);	
+		}else{
+			curpoint->xoffset = last->curwidth + last->xoffset;
+		}
+			
+		
+	}
+	exchar* next ;
+	exchar* tnext ;
+	for(next = curpoint + 1; UTF8TRAILING(next->ch); next ++);
+	tnext = next ;
+	while(1){
+		exchar* tlast ;
+		for(tlast = tnext - 1;UTF8TRAILING(tlast->ch); tlast --);
+		if(updatewin().x - tlast->xoffset < 5){
+			tnext->xoffset = 0;
+			tnext->yoffset = tlast->yoffset + 1 ;
+//			fwrite("\n\r", sizeof("\n\r"), 1, stdout);	
+		}else{
+			tnext->xoffset = tlast->curwidth + tlast->xoffset;
+		}
+		if(tnext->ch == '\0'){break;};
+		for(tnext = tnext + 1; UTF8TRAILING(tnext->ch); tnext ++);
+	}
+	/*
+	if(op.x < 0){
+		op = cur_expr->cur_start;
+		p = getCUR();
+		if(p.x - op.x > 0){
+			curpoint->curwidth = p.x - op.x ;
+			curpoint->curp = p ;
+		}	
+		op = p;
+	}else{
+		p = getCUR();
+		if(p.x - op.x > 0){
+			curpoint->curwidth = p.x - op.x ;
+			curpoint->curp = op ;
+		}	
+		op = p ;
+	}
+*/
 }
 
 int main(int argc, char** argv){
@@ -309,6 +438,8 @@ int main(int argc, char** argv){
 		cur_expr->position = 0 ;
 		cur_expr->ech = (exchar*)malloc(sizeof(exchar));
 		cur_expr->ech[0].ch = '\0';
+		cur_expr->cur_start = initcurP();
+		printf("init successed x:%d y%d\n\r", cur_expr->cur_start.x  ,cur_expr->cur_start.y);
 	}
 
 	int my_pipe[2];
@@ -393,6 +524,8 @@ int escape(){
 		state = 1;
 		escape();
 		break;
+		default:
+		break;
 		}
 	break;
 
@@ -443,6 +576,9 @@ int escape(){
 			home ();
 		}
 		break;
+		default:
+		
+		break;
 		}
 	break;
 
@@ -458,7 +594,11 @@ int escape(){
 			home();
 		}
 		break;
+		default:
+		break;
 		}
+	break;
+	default:
 	break;
 	}
 	chbuf[0]=chbuf[1]=chbuf[2]=chbuf[3]=state=0;
