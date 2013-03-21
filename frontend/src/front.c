@@ -68,6 +68,8 @@ struct termios * newter;
 exexpr * cur_expr ;
 curP win ;
 pid_t child_pid;
+pid_t writer_pid ;
+FILE* child_std[2] ;
 
 curP updatewin(){
 	struct winsize w;
@@ -429,6 +431,7 @@ int valid_char(char ch){
 		curpoint =  cur_expr->ech + cur_expr->len - cur_expr->position - 1;
 		curpoint->color = curpoint->curwidth = curpoint->xoffset = curpoint->yoffset = 0 ;
 	}
+	
 }
 int utf8_valid_char(char ch){
 	exchar* tpoint ;
@@ -488,10 +491,48 @@ int utf8_valid_char(char ch){
 		dy = curpoint->yoffset - tpoint->yoffset ;
 		CURmove(dx,dy);
 	}
+	if(ch == '\r'){
+		register int i ;
+		char* buf = malloc(cur_expr->len + 5);
+		memset(buf, 0, cur_expr->len + 5);
+		for(i = 0;cur_expr->ech[i].ch != '\0'; i++){
+			buf[i] = cur_expr->ech[i].ch ;
+		}
+		fwrite(buf, strlen(buf), 1, child_std[1]);
+		/*TODO make another cur_expr*/
+		fflush(child_std[1]);
+	}
 }
 
 int main(int argc, char** argv){
 	char c;
+	int WRITER_PIPE[2];
+	FILE* writer_pipe[2];
+	if(pipe(WRITER_PIPE) == -1)
+	{
+		perror("\n\rError creating pipe");
+		exit(-1);
+	}else{
+		writer_pipe[0] = fdopen(WRITER_PIPE[0], "r");
+		writer_pipe[1] = fdopen(WRITER_PIPE[1], "w");
+	}
+	writer_pid = fork();
+	if(writer_pid == -1){
+		perror("Fork write_pid error\n");
+		exit(-1);
+	}
+	if(writer_pid == 0){
+		char c ;
+		fclose(writer_pipe[1]);
+		while(c = getc(writer_pipe[0])){
+			if(c != '\n' && c != '\r'){
+				fwrite(&c, 1, 1, stdout);
+			}else{
+				fwrite("\n\r", 2, 1, stdout);
+			}
+			fflush(stdout);
+		}
+	}else{
 	newter=(struct termios *)malloc(sizeof(struct termios)) ;
 	original_ter=(struct termios *)malloc(sizeof(struct termios)) ;
 	
@@ -511,23 +552,31 @@ int main(int argc, char** argv){
 		printf("init successed x:%d y%d\n\r", cur_expr->cur_start.x  ,cur_expr->cur_start.y);
 	}
 
-	int my_pipe[2];
-	if(pipe(my_pipe) == -1)
+	int CHILD_STD_FILENO[2];
+	if(pipe(CHILD_STD_FILENO) == -1)
 	{
-		fprintf(stderr, "Error creating pipe\n");
+		perror("\n\rError creating pipe");
+		safe_exit();
+	}else{
+		child_std[0] = fdopen(CHILD_STD_FILENO[0], "r");
+		child_std[1] = fdopen(CHILD_STD_FILENO[1], "w");
 	}
 
 	
 	child_pid = fork();
 	if(child_pid == -1)
 	{
-		fprintf(stderr, "Fork error\n");
+		perror("Fork error\n");
+		safe_exit();
 	}
 	if(child_pid == 0){ // child process
-		dup2(my_pipe[0], STDIN_FILENO);
-		dup2(my_pipe[1], STDOUT_FILENO);
-		execlp("ikarus", "ikarus", "--quiet", NULL);
+			dup2(CHILD_STD_FILENO[0], STDIN_FILENO);
+			fclose(child_std[1]);
+			dup2(WRITER_PIPE[1], STDOUT_FILENO);
+			fclose(writer_pipe[0]);
+			execlp("ikarus", "ikarus", /*"--quiet", */NULL);
 	}else{
+		close(CHILD_STD_FILENO[0]);
 		while(1){
 			c=getchar();
 			switch(c){
@@ -548,6 +597,7 @@ int main(int argc, char** argv){
 			break;
 			}
 		}
+	}
 	}
 }
 int safe_exit(){
@@ -572,6 +622,7 @@ int safe_exit(){
 	tcsetattr(STDIN_FILENO, TCSANOW, original_ter);
 	free(original_ter);
 	free(newter);
+	kill(writer_pid, SIGTERM);
 	kill(child_pid, SIGTERM);
 	exit(0);
 }
@@ -656,7 +707,6 @@ int escape(){
 		case '~':
 		if(chbuf[state-1] == '3' && chbuf[state-2] == '['){
 			delete() ;
-//			printf("del ");
 		}else if(chbuf[state-1]=='4'&&chbuf[state-2]== '['){
 			end();
 		}else if(chbuf[state-1]=='1'&&chbuf[state-2]== '['){
