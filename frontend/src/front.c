@@ -259,6 +259,7 @@ size_t write_utf8(exchar* utf8leading, FILE* stream){
 void updateEXPR(exchar* start, exchar* curpoint){
 	exchar* tpoint = start ;
 	exchar pointS = *curpoint;
+	exchar *tlast = NULL;
 	int dx,dy ;
 	while(1){
 		exchar* tlast ;
@@ -281,18 +282,15 @@ void updateEXPR(exchar* start, exchar* curpoint){
 	CLR_to_end_of_scrn();
 	tpoint = start ;
 	while(1){
-		exchar* tlast ;
-		if(tpoint != cur_expr->ech){
-			for(tlast = tpoint - 1;UTF8TRAILING(tlast->ch); tlast --);
-			if(tpoint->yoffset>tlast->yoffset ){
-				fwrite("\n\r", sizeof("\n\r"), 1, stdout);
-			}
+		if(tlast != NULL && tpoint->yoffset>tlast->yoffset ){
+			fwrite("\n\r", sizeof("\n\r"), 1, stdout);
 		}
 		if(tpoint->ch != '\0'){
 			write_utf8(tpoint, stdout);
 		}else{
 			break;
 		}
+		tlast = tpoint ;
 		for(tpoint = tpoint + 1; UTF8TRAILING(tpoint->ch); tpoint ++);
 	}
 	dx = curpoint->xoffset - tpoint->xoffset ;
