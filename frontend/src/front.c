@@ -345,7 +345,6 @@ int right(){
 		return -1;
 	}
 }
-
 int backspace(int no){
 	unsigned char ch ;
 	if( cur_expr->len > cur_expr->position){
@@ -364,11 +363,16 @@ int backspace(int no){
 			updateEXPR(curpoint, curpoint);
 		}
 	}else{
-		return 0;
+		return -1;
 	}
 	
 	return 0;
 }
+int delete(){
+	if(right() == -1){return -1;}
+	return backspace(1);
+}
+
 int utf8width(char * utf8leading){
 	int width ,i;
 	int32_t ucs;
@@ -651,8 +655,8 @@ int escape(){
 		switch(c){
 		case '~':
 		if(chbuf[state-1] == '3' && chbuf[state-2] == '['){
-//			delete() ;
-			printf("del ");
+			delete() ;
+//			printf("del ");
 		}else if(chbuf[state-1]=='4'&&chbuf[state-2]== '['){
 			end();
 		}else if(chbuf[state-1]=='1'&&chbuf[state-2]== '['){
