@@ -235,6 +235,10 @@ typedef struct utf8proc_property_struct {
 #define UTF8PROC_DECOMP_TYPE_FRACTION 15
 #define UTF8PROC_DECOMP_TYPE_COMPAT   16
 
+
+
+#define UTF8LEADING(ch,no)      (((ch) & ((0xFF00 >> ((no)+1)) & 0x00FF) ) == ((0xFF00 >> (no)) & 0x00FF))
+
 extern const int8_t utf8proc_utf8class[256];
 
 const char *utf8proc_version(void);
@@ -372,6 +376,7 @@ uint8_t *utf8proc_NFD(const uint8_t *str);
 uint8_t *utf8proc_NFC(const uint8_t *str);
 uint8_t *utf8proc_NFKD(const uint8_t *str);
 uint8_t *utf8proc_NFKC(const uint8_t *str);
+size_t utf8bytes(char utf8leading);
 /*
  *  Returns a pointer to newly allocated memory of a NFD, NFC, NFKD or NFKC
  *  normalized version of the null-terminated string 'str'.

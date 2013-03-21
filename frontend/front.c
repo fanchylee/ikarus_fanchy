@@ -17,8 +17,9 @@
 #define CURposition	("\x1B[6n")
 #define CURhome		("\x1B\x4F\x48")
 #define CURend		("\x1B\x4F\x46")
-#define CLRtoEnd	("\x1B\x5B\x4B")
-#define BACKspace	("\x1B\x5B\x31\x44")
+#define CLRtoENDofLINE	("\x1B[\x4B")
+#define CLRtoENDofSCRN	("\x1B[J")
+#define BACKspace	("\x1B[\x31\x44")
 #define CURhide		("\x1B[?25l")
 #define CURshow		("\x1B[?25h")
 
@@ -27,17 +28,19 @@
 #define EOT ((char)0x04)
 #define ESC ((char)0x1B)
 #define BS()		{fwrite( BACKspace, sizeof(BACKspace),1,stdout);}
-#define CLRtoEND()	{fwrite( CLRtoEnd, sizeof(CLRtoEnd),1,stdout);}
 #define saveCUR()	{fwrite( CURsave, sizeof(CURsave),1,stdout);}
 #define restoreCUR()	{fwrite( CURrestore, sizeof(CURrestore),1,stdout);}
 #define leftCUR()	{fwrite( CURleft, sizeof(CURleft),1,stdout);}
 #define rightCUR()	{fwrite( CURright, sizeof(CURright),1,stdout);}
 #define upCUR()		{fwrite( CURup, sizeof(CURup),1,stdout);}
+#define CLR_to_end_of_line()	{fwrite( CLRtoENDofLINE, sizeof(CLRtoENDofLINE),1,stdout);}
+#define CLR_to_end_of_scrn()	{fwrite( CLRtoENDofSCRN, sizeof(CLRtoENDofSCRN),1,stdout);}
 #define CtrlD EOT
 #define CtrlC ETX
 
 #define UTF8TRAILING(ch)	((((ch)>>6) & 0x0003) == 0x02)
 #define UTF8LEADING(ch,no)      (((ch) & ((0xFF00 >> ((no)+1)) & 0x00FF) ) == ((0xFF00 >> (no)) & 0x00FF))
+#define ASCII(ch)		(((ch) & 0x80) == 0)
 
 typedef struct _curP{
 	int x ;
@@ -232,16 +235,70 @@ int CURmoveto(int x, int y){
 	strcat(buf, "H");
 	fwrite( buf, strlen(buf),1,stdout);
 }
-int utf8bytes(char ch){
-	unsigned char no = 2 ;
-	if((ch & 0x80) == 0)return 1 ;
-	while(no <= 6){
-		if(UTF8LEADING(ch, no))return no ;
-		no += 1;
+size_t write_utf8(exchar* utf8leading, FILE* stream){
+	char ch = utf8leading->ch ;
+	char buf[7];
+	register exchar* t = utf8leading + 1  ;
+	register int i = 1;
+	if(ASCII(ch)){
+		return fwrite(&ch, 1, 1, stream);
 	}
-	return -1 ;
+	buf[0] = utf8leading->ch ;
+	while(UTF8TRAILING(t->ch )){
+		buf[i] = t->ch;
+		t = t + 1 ;
+		i = i + 1 ;
+	}
+	buf[i] = '\0';
+	if(i != utf8bytes(ch)){
+		perror("\n\rwrite_utf8: illegal utf8 charater");
+		safe_exit();
+	}
+	return fwrite(buf, i, 1, stream);
 }
-
+void updateEXPR(exchar* start, exchar* curpoint){
+	exchar* tpoint = start ;
+	exchar pointS = *curpoint;
+	int dx,dy ;
+	while(1){
+		exchar* tlast ;
+		if(tpoint != cur_expr->ech){
+			for(tlast = tpoint - 1;UTF8TRAILING(tlast->ch); tlast --);
+			if(updatewin().x - tlast->xoffset < 5){
+				tpoint->xoffset = 0;
+				tpoint->yoffset = tlast->yoffset + 1 ;
+			}else{
+				tpoint->xoffset = tlast->curwidth + tlast->xoffset;
+				tpoint->yoffset = tlast->yoffset ;
+			}
+		}else{
+			tpoint->xoffset = tpoint->yoffset = 0 ;
+		}
+		if(tpoint->ch == '\0'){	break;};
+		for(tpoint = tpoint + 1; UTF8TRAILING(tpoint->ch); tpoint ++);
+	}
+	CURmove(start->xoffset-pointS.xoffset, start->yoffset-pointS.yoffset);
+	CLR_to_end_of_scrn();
+	tpoint = start ;
+	while(1){
+		exchar* tlast ;
+		if(tpoint != cur_expr->ech){
+			for(tlast = tpoint - 1;UTF8TRAILING(tlast->ch); tlast --);
+			if(tpoint->yoffset>tlast->yoffset ){
+				fwrite("\n\r", sizeof("\n\r"), 1, stdout);
+			}
+		}
+		if(tpoint->ch != '\0'){
+			write_utf8(tpoint, stdout);
+		}else{
+			break;
+		}
+		for(tpoint = tpoint + 1; UTF8TRAILING(tpoint->ch); tpoint ++);
+	}
+	dx = curpoint->xoffset - tpoint->xoffset ;
+	dy = curpoint->yoffset - tpoint->yoffset ;
+	CURmove(dx,dy);
+}
 int home(){
 	while(left(1) != -1);
 }
@@ -272,16 +329,15 @@ int right(){
 	exchar* curpoint ;
 	unsigned char ch = '\0';
 	if( cur_expr->position > 0){
+		cur_expr->position -= 1;
 		curpoint = cur_expr->ech + cur_expr->len - cur_expr->position;
 		ch = curpoint->ch ;
-		cur_expr->position -= 1;
 		if(UTF8TRAILING(ch)){
 			right();
 		}else{
-			if(curpoint->curwidth == 0){
-				curpoint->curwidth = getwidth(curpoint);
-			}
-			CURmoveright(curpoint->curwidth);
+			exchar* curbefore;
+			for(curbefore = curpoint - 1; UTF8TRAILING(curbefore->ch); curbefore --);
+			CURmoveright(curbefore->curwidth);
 		}
 		return 0;
 	}else{
@@ -300,19 +356,11 @@ int backspace(int no){
 		memmove(src - 1, src, (cur_expr->position+1) * sizeof(exchar)) ;
 		cur_expr->len -= 1;
 		cur_expr->ech = realloc(cur_expr->ech, (cur_expr->len+1)*sizeof(exchar));
-		curpoint = curbuf + 8 - no ;
+		curpoint = cur_expr->ech + cur_expr->len - cur_expr->position;
 		if(UTF8TRAILING(ch)){
 			backspace(no+1) ;
 		}else{
-			if(curpoint->curwidth == 0){
-				curpoint->curwidth = getwidth(curpoint);
-			}
-			int i;
-			for(i = curpoint->curwidth;i>0;i--){
-				BS();
-			}
-			CLRtoEND();
-			
+			updateEXPR(curpoint, curpoint);
 		}
 	}else{
 		return 0;
@@ -320,27 +368,38 @@ int backspace(int no){
 	
 	return 0;
 }
-
-int getwidth(exchar* utf8leading ){
-	char buf[6];
-	int i = 1;
+int utf8width(char * utf8leading){
+	int width ,i;
 	int32_t ucs;
-	int width ;
-	exchar* t;
-	{
-		buf[0] = utf8leading->ch;
-		t = utf8leading + 1 ;
-		while(UTF8TRAILING(t->ch )){
-			buf[i] = t->ch;
-			t = t + 1 ;
-			i = i + 1 ;
+	char buf[7] = {'\0'};
+	strncpy(buf, utf8leading, sizeof(utf8bytes(*utf8leading)));
+	for(i = 1;i <= utf8bytes(*utf8leading) - 1; i++){
+		if(!UTF8TRAILING(buf[i])){
+			perror("\n\rutf8width: not a legal UTF8 character");
+			safe_exit();
 		}
-		buf[i] = '\0';
-		utf8proc_iterate(buf, sizeof(buf), &ucs);
-		width = mk_wcwidth(ucs); 
-		return width; 
 	}
+	utf8proc_iterate(buf, sizeof(buf), &ucs);
+	width = mk_wcwidth(ucs); 
+	return width; 
 }
+int getwidth(exchar* utf8leading ){
+	exchar* t;
+	int i = 1;
+	char buf[7];
+	if(ASCII(utf8leading->ch)){return 1;}
+	buf[0] = utf8leading->ch;
+	t = utf8leading + 1 ;
+	while(UTF8TRAILING(t->ch )){
+		buf[i] = t->ch;
+		t = t + 1 ;
+		i = i + 1 ;
+	}
+	buf[i] = '\0';
+	return utf8width(buf);
+}
+
+
 int valid_char(char ch){
 	fwrite(&ch, 1,1,stdout);
 	exchar* curpoint = cur_expr->ech + cur_expr->len - cur_expr->position;
@@ -374,7 +433,7 @@ int utf8_valid_char(char ch){
 	break;
 	
 	case -1:
-	fprintf(stderr, "unknown utf8 character\n");
+	perror("\n\rutf8_valid_char: unknown utf8 character\n");
 	safe_exit();
 	break;
 	
@@ -408,7 +467,7 @@ int utf8_valid_char(char ch){
 					fwrite("\n\r", sizeof("\n\r"), 1, stdout);
 				}
 				if(tpoint->ch != '\0'){
-					fwrite(&(tpoint->ch), utf8bytes(tpoint->ch), 1, stdout);
+					write_utf8(tpoint, stdout);
 				}
 			}
 			if(tpoint->ch == '\0'){break;};

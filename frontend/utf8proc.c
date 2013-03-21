@@ -1,5 +1,6 @@
 /*
  *  Copyright (c) 2009 Public Software Group e. V., Berlin, Germany
+ *  Copyright (c) 2013 Fanchy
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a
  *  copy of this software and associated documentation files (the "Software"),
@@ -585,3 +586,12 @@ uint8_t *utf8proc_NFKC(const uint8_t *str) {
   return retval;
 }
 
+size_t utf8bytes(char utf8leading){
+	unsigned char no = 2 ;
+	if((utf8leading & 0x80) == 0)return 1 ;
+	while(no <= 6){
+		if(UTF8LEADING(utf8leading, no))return no ;
+		no += 1;
+	}
+	return -1 ;
+}
