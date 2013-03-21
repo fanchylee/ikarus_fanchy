@@ -241,7 +241,7 @@ size_t write_utf8(exchar* utf8leading, FILE* stream){
 	register exchar* t = utf8leading + 1  ;
 	register int i = 1;
 	if(ch == '\n'){
-		return fwrite(" ", 1, 1, stream);
+		return fwrite(" \x1B[\x4B", strlen(" \x1B[\x4B"), 1, stream);
 	}
 	if(ASCII(ch)){
 		return fwrite(&ch, 1, 1, stream);
@@ -406,7 +406,7 @@ int valid_char(char ch){
 		fwrite(&ch, 1,1,stdout);
 	}else{
 		ch = '\n';
-		fwrite(" ", 1, 1, stdout);
+		fwrite(" \x1B[\x4B", strlen(" \x1B[\x4B"), 1, stdout);
 	}
 	if(cur_expr->position == 0) {
 		cur_expr->ech[cur_expr->len].ch = ch ;
