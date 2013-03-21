@@ -312,10 +312,9 @@ int left(int no){
 		if(UTF8TRAILING(ch)){
 			left(no+1);
 		}else{
-			if(curpoint->curwidth == 0){
-				curpoint->curwidth = getwidth(curpoint);
-			}
-			CURmoveleft(curpoint->curwidth);
+			exchar* curnext;
+			for(curnext = curpoint + 1; UTF8TRAILING(curnext->ch); curnext ++);
+			CURmove(curpoint->xoffset-curnext->xoffset, curpoint->yoffset-curnext->yoffset);
 		}
 		return 0 ;
 	}else{
@@ -337,7 +336,7 @@ int right(){
 		}else{
 			exchar* curbefore;
 			for(curbefore = curpoint - 1; UTF8TRAILING(curbefore->ch); curbefore --);
-			CURmoveright(curbefore->curwidth);
+			CURmove(curpoint->xoffset-curbefore->xoffset, curpoint->yoffset-curbefore->yoffset);
 		}
 		return 0;
 	}else{
