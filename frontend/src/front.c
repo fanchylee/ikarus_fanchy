@@ -240,6 +240,9 @@ size_t write_utf8(exchar* utf8leading, FILE* stream){
 	char buf[7];
 	register exchar* t = utf8leading + 1  ;
 	register int i = 1;
+	if(ch == '\n'){
+		return fwrite(" ", 1, 1, stream);
+	}
 	if(ASCII(ch)){
 		return fwrite(&ch, 1, 1, stream);
 	}
@@ -262,10 +265,10 @@ void updateEXPR(exchar* start, exchar* curpoint){
 	exchar *tlast = NULL;
 	int dx,dy ;
 	while(1){
-		exchar* tlast ;
+	//	exchar* tlast ;
 		if(tpoint != cur_expr->ech){
 			for(tlast = tpoint - 1;UTF8TRAILING(tlast->ch); tlast --);
-			if(updatewin().x - tlast->xoffset < 5){
+			if(tlast->ch == '\n'||updatewin().x - tlast->xoffset < 5){
 				tpoint->xoffset = 0;
 				tpoint->yoffset = tlast->yoffset + 1 ;
 			}else{
@@ -281,6 +284,7 @@ void updateEXPR(exchar* start, exchar* curpoint){
 	CURmove(start->xoffset-pointS.xoffset, start->yoffset-pointS.yoffset);
 	CLR_to_end_of_scrn();
 	tpoint = start ;
+	tlast = NULL;
 	while(1){
 		if(tlast != NULL && tpoint->yoffset>tlast->yoffset ){
 			fwrite("\n\r", sizeof("\n\r"), 1, stdout);
@@ -398,8 +402,12 @@ int getwidth(exchar* utf8leading ){
 
 
 int valid_char(char ch){
-	fwrite(&ch, 1,1,stdout);
-	exchar* curpoint = cur_expr->ech + cur_expr->len - cur_expr->position;
+	if(ch != '\r'){
+		fwrite(&ch, 1,1,stdout);
+	}else{
+		ch = '\n';
+		fwrite(" ", 1, 1, stdout);
+	}
 	if(cur_expr->position == 0) {
 		cur_expr->ech[cur_expr->len].ch = ch ;
 		cur_expr->len += 1;
@@ -408,11 +416,13 @@ int valid_char(char ch){
 	}else{
 		cur_expr->len += 1;
 		cur_expr->ech = realloc(cur_expr->ech, (cur_expr->len+1)*sizeof(exchar));
-		memmove(curpoint + 1, curpoint ,sizeof(exchar)*(cur_expr->position+1));
-		curpoint->ch = ch ;
+		memmove(cur_expr->ech+cur_expr->len - cur_expr->position, cur_expr->ech+cur_expr->len - cur_expr->position-1,sizeof(exchar)*(cur_expr->position+1));
+		cur_expr->ech[cur_expr->len - cur_expr->position-1].ch = ch ;
 		cur_expr->ech[cur_expr->len].ch = '\0' ;
 	}
 	if(UTF8TRAILING(ch)){
+		exchar* curpoint = NULL;
+		curpoint =  cur_expr->ech + cur_expr->len - cur_expr->position - 1;
 		curpoint->color = curpoint->curwidth = curpoint->xoffset = curpoint->yoffset = 0 ;
 	}
 }
@@ -452,7 +462,7 @@ int utf8_valid_char(char ch){
 		while(1){
 			exchar* tlast ;
 			for(tlast = tpoint - 1;UTF8TRAILING(tlast->ch); tlast --);
-			if(updatewin().x - tlast->xoffset < 5){
+			if(tlast->ch == '\n' || updatewin().x - tlast->xoffset < 5 ){
 				tpoint->xoffset = 0;
 				tpoint->yoffset = tlast->yoffset + 1 ;
 			}else{
@@ -484,6 +494,7 @@ int main(int argc, char** argv){
 
 	tcgetattr(STDIN_FILENO, original_ter);
 	cfmakeraw(newter);
+	newter->c_oflag |= ONLCR;
 	tcsetattr(STDIN_FILENO, TCSANOW, newter);
 	setvbuf(stdin,NULL,_IONBF,0);
 	{

@@ -174,6 +174,8 @@ int mk_wcwidth(wchar_t ucs)
     { 0xE0100, 0xE01EF }
   };
 
+  if (ucs == '\n')
+    return 1 ;
   /* test for 8-bit control characters */
   if (ucs == 0)
     return 0;
