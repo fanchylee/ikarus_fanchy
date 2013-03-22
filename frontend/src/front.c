@@ -69,7 +69,12 @@ exexpr * cur_expr ;
 curP win ;
 pid_t child_pid;
 pid_t writer_pid ;
-FILE* child_std[2] ;
+int CHILD_MAIN_PIPE[2];
+FILE* child_main_pipe[2] ;
+int CHILD_WRITER_PIPE[2];
+FILE* child_writer_pipe[2];
+int WRITER_MAIN_PIPE[2];
+FILE* writer_main_pipe[2];
 
 curP updatewin(){
 	struct winsize w;
@@ -491,30 +496,29 @@ int utf8_valid_char(char ch){
 		dy = curpoint->yoffset - tpoint->yoffset ;
 		CURmove(dx,dy);
 	}
-	if(ch == '\r'){
+	if(ch == '\r' && cur_expr->position == 0){
 		register int i ;
 		char* buf = malloc(cur_expr->len + 5);
 		memset(buf, 0, cur_expr->len + 5);
-		for(i = 0;cur_expr->ech[i].ch != '\0'; i++){
+		buf[cur_expr->len - 1] = '\n' ;
+		for(i = cur_expr->len - 2;cur_expr->ech[i].ch != '\n' && i >= 0; i--){
 			buf[i] = cur_expr->ech[i].ch ;
 		}
-		fwrite(buf, strlen(buf), 1, child_std[1]);
+		fwrite(buf + i + 1 , strlen(buf + i + 1), 1, child_main_pipe[1]);
 		/*TODO make another cur_expr*/
-		fflush(child_std[1]);
+		fflush(child_main_pipe[1]);
 	}
 }
 
 int main(int argc, char** argv){
 	char c;
-	int WRITER_PIPE[2];
-	FILE* writer_pipe[2];
-	if(pipe(WRITER_PIPE) == -1)
+	if(pipe(CHILD_WRITER_PIPE) == -1)
 	{
 		perror("\n\rError creating pipe");
 		exit(-1);
 	}else{
-		writer_pipe[0] = fdopen(WRITER_PIPE[0], "r");
-		writer_pipe[1] = fdopen(WRITER_PIPE[1], "w");
+		child_writer_pipe[0] = fdopen(CHILD_WRITER_PIPE[0], "r");
+		child_writer_pipe[1] = fdopen(CHILD_WRITER_PIPE[1], "w");
 	}
 	writer_pid = fork();
 	if(writer_pid == -1){
@@ -522,17 +526,20 @@ int main(int argc, char** argv){
 		exit(-1);
 	}
 	if(writer_pid == 0){
-		char c ;
-		fclose(writer_pipe[1]);
-		while(c = getc(writer_pipe[0])){
-			if(c != '\n' && c != '\r'){
-				fwrite(&c, 1, 1, stdout);
-			}else{
-				fwrite("\n\r", 2, 1, stdout);
-			}
-			fflush(stdout);
+	/*writer_pid*/
+	char c ;
+	fclose(child_writer_pipe[1]);
+	while(c = getc(child_writer_pipe[0])){
+		if(c != '\n' && c != '\r'){
+			fwrite(&c, 1, 1, stdout);
+		}else{
+			fwrite("\n\r", 2, 1, stdout);
 		}
+		fflush(stdout);
+	}
+	/*********/
 	}else{
+	/*main process*/
 	newter=(struct termios *)malloc(sizeof(struct termios)) ;
 	original_ter=(struct termios *)malloc(sizeof(struct termios)) ;
 	
@@ -552,53 +559,51 @@ int main(int argc, char** argv){
 		printf("init successed x:%d y%d\n\r", cur_expr->cur_start.x  ,cur_expr->cur_start.y);
 	}
 
-	int CHILD_STD_FILENO[2];
-	if(pipe(CHILD_STD_FILENO) == -1)
+	if(pipe(CHILD_MAIN_PIPE) == -1)
 	{
 		perror("\n\rError creating pipe");
 		safe_exit();
 	}else{
-		child_std[0] = fdopen(CHILD_STD_FILENO[0], "r");
-		child_std[1] = fdopen(CHILD_STD_FILENO[1], "w");
+		child_main_pipe[0] = fdopen(CHILD_MAIN_PIPE[0], "r");
+		child_main_pipe[1] = fdopen(CHILD_MAIN_PIPE[1], "w");
 	}
 
-	
 	child_pid = fork();
 	if(child_pid == -1)
 	{
 		perror("Fork error\n");
 		safe_exit();
 	}
-	if(child_pid == 0){ // child process
-			dup2(CHILD_STD_FILENO[0], STDIN_FILENO);
-			fclose(child_std[1]);
-			dup2(WRITER_PIPE[1], STDOUT_FILENO);
-			fclose(writer_pipe[0]);
-			execlp("ikarus", "ikarus", /*"--quiet", */NULL);
+	if(child_pid == 0){ 
+	/* child process*/
+	dup2(CHILD_MAIN_PIPE[0], STDIN_FILENO);
+	fclose(child_main_pipe[1]);
+	dup2(CHILD_WRITER_PIPE[1], STDOUT_FILENO);
+	fclose(child_writer_pipe[0]);
+	execlp("ikarus", "ikarus", /*"--quiet", */NULL);
+	/************/
 	}else{
-		close(CHILD_STD_FILENO[0]);
-		while(1){
-			c=getchar();
-			switch(c){
-			case EOT:
-			safe_exit();
-			break;
-			
-			case '\x7F':
-			backspace(1);
-			break;
-			
-			case ESC:
-			escape() ;
-			break;		
-			
-			default:
-			utf8_valid_char(c);
-			break;
-			}
+	close(CHILD_MAIN_PIPE[0]);
+	while(1){
+		c=getchar();
+		switch(c){
+		case EOT:
+		safe_exit();
+		break;
+		
+		case '\x7F':
+		backspace(1);
+		break;
+		
+		case ESC:
+		escape() ;
+		break;		
+		
+		default:
+		utf8_valid_char(c);
+		break;
 		}
-	}
-	}
+	}}}
 }
 int safe_exit(){
 	exexpr *temp1 ;
