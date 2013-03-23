@@ -45,7 +45,7 @@ description:
 
   (define eval-depth 0)
 
-  (define prompt-string "");;original ">"
+  (define prompt-string ">");;original ">"
   (define prompt-string2 "");;original " "
   (define waiter-prompt-string
     (make-parameter prompt-string

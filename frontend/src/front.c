@@ -6,6 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
+#include <fcntl.h>
+#include <errno.h>
+
 #define DEL		("\x1B\x5B\x33\x7E")
 
 #define CURup		("\x1B\x5B\x41")
@@ -41,6 +45,21 @@
 #define UTF8TRAILING(ch)	((((ch)>>6) & 0x0003) == 0x02)
 #define UTF8LEADING(ch,no)      (((ch) & ((0xFF00 >> ((no)+1)) & 0x00FF) ) == ((0xFF00 >> (no)) & 0x00FF))
 #define ASCII(ch)		(((ch) & 0x80) == 0)
+
+#define WRITER_BUF_SIZE 2
+
+#define SET_FL(fd, flags) {\
+	int     val;\
+	if ((val = fcntl((fd), F_GETFL, 0)) < 0){\
+		perror("\n\rfcntl F_GETFL error");\
+		safe_exit();\
+	}\
+	val |= (flags);\
+	if (fcntl((fd), F_SETFL, val) < 0){\
+		perror("\n\rfcntl F_SETFL error");\
+		safe_exit();\
+	}\
+}
 
 typedef struct _curP{
 	int x ;
@@ -541,6 +560,7 @@ int main(int argc, char** argv){
 	}else{
 		child_writer_pipe[0] = fdopen(CHILD_WRITER_PIPE[0], "r");
 		child_writer_pipe[1] = fdopen(CHILD_WRITER_PIPE[1], "w");
+		setbuf(child_writer_pipe[1], NULL);
 	}
 	writer_pid = fork();
 	if(writer_pid == -1){
@@ -549,15 +569,62 @@ int main(int argc, char** argv){
 	}
 	if(writer_pid == 0){
 	/*writer_pid*/
+	char buf[WRITER_BUF_SIZE] = {'\0'}, buf2[WRITER_BUF_SIZE]={'\0'};
+	register int i=0, j=0;
 	char c ;
+	fd_set rfds;
+	int retval, ntowrite;
 	fclose(child_writer_pipe[1]);
-	while(c = getc(child_writer_pipe[0])){
-		if(c != '\n' && c != '\r'){
-			fwrite(&c, 1, 1, stdout);
-		}else{
-			fwrite("\n\r", 2, 1, stdout);
+//	SET_FL(CHILD_WRITER_PIPE[0], O_NONBLOCK);
+	FD_ZERO(&rfds);
+	FD_SET(CHILD_WRITER_PIPE[0], &rfds);
+/*
+	
+*/
+	while((retval = select(CHILD_WRITER_PIPE[0]+1, &rfds, NULL, NULL, NULL)) ){
+		if (retval == -1){
+			perror("select()");
+			safe_exit();
+		}else if(retval){
+			fwrite("\n\r\n\rsome data", 9, 1, stdout);
 		}
-		fflush(stdout);
+		if(FD_ISSET(CHILD_WRITER_PIPE[0], &rfds)){
+/*
+			while(c = getc(child_writer_pipe[0])){
+				if(c != '\n' && c != '\r'){
+					fwrite(&c, 1, 1, stdout);
+				}else{
+					fwrite("\n\r", 2, 1, stdout);
+				}
+				fflush(stdout);
+			}
+*/
+			while(1){
+//				errno = 0;
+				ntowrite = fread(buf, sizeof(buf), 1, child_writer_pipe[0]);
+//				if(errno == EAGAIN){break;}
+				if(ntowrite > 0){
+					fwrite(buf, ntowrite, 1, stdout);
+/*
+					for(i = 0; i < ntowrite; i++){
+						if(buf[i] == '\n' || buf[i] == '\r'){
+							fwrite(buf2, strlen(buf2), 1, stdout);
+							fwrite("\n\r", 2 ,1, stdout);
+							j = i + 1;
+							fflush(stdout);
+						}else{
+							buf2[i - j] = buf[i] ;
+						}
+					}
+*/
+				}else{
+					perror("\n\rwriter_pid: read error");
+					safe_exit();
+				}
+			}
+		}
+		FD_ZERO(&rfds);
+		FD_SET(CHILD_WRITER_PIPE[0], &rfds);
 	}
 	/*********/
 	}else{
@@ -570,7 +637,7 @@ int main(int argc, char** argv){
 	cfmakeraw(newter);
 	newter->c_oflag |= ONLCR;
 	tcsetattr(STDIN_FILENO, TCSANOW, newter);
-	setvbuf(stdin,NULL,_IONBF,0);
+	//setbuf(stdin,NULL);
 	{
 		cur_expr = (exexpr*)malloc(sizeof(exexpr));
 		cur_expr->len = 0 ;
