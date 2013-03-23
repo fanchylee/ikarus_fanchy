@@ -68,14 +68,33 @@ struct termios * newter;
 exexpr * cur_expr ;
 curP win ;
 pid_t child_pid;
+FILE* child_stat ;
 pid_t writer_pid ;
 int CHILD_MAIN_PIPE[2];
-FILE* child_main_pipe[2] ;
 int CHILD_WRITER_PIPE[2];
-FILE* child_writer_pipe[2];
 int WRITER_MAIN_PIPE[2];
+FILE* child_main_pipe[2] ;
+FILE* child_writer_pipe[2];
 FILE* writer_main_pipe[2];
-
+void waitstate(pid_t matchpid, char matchstate){
+	char filename[256], state;
+	pid_t pid;
+	char child_pid_str[30];
+	sprintf(child_pid_str, "/proc/%d/stat", matchpid);
+	while(1){
+		child_stat = fopen(child_pid_str, "r");
+		if(fscanf(child_stat, "%d %s %c", &pid, filename, &state) > 0){
+			if(state == matchstate){
+				break;
+			}
+			fclose(child_stat);
+		}else{
+			perror("\n\rwaitstate: get the state of process error");
+			safe_exit();
+		}
+	}
+}
+	
 curP updatewin(){
 	struct winsize w;
 	ioctl(0, TIOCGWINSZ, &w);
@@ -496,6 +515,7 @@ int utf8_valid_char(char ch){
 		dy = curpoint->yoffset - tpoint->yoffset ;
 		CURmove(dx,dy);
 	}
+	fflush(stdout);
 	if(ch == '\r' && cur_expr->position == 0){
 		register int i ;
 		char* buf = malloc(cur_expr->len + 5);
@@ -507,6 +527,8 @@ int utf8_valid_char(char ch){
 		fwrite(buf + i + 1 , strlen(buf + i + 1), 1, child_main_pipe[1]);
 		/*TODO make another cur_expr*/
 		fflush(child_main_pipe[1]);
+		free(buf);
+		waitstate(child_pid, 'S');
 	}
 }
 
@@ -569,8 +591,7 @@ int main(int argc, char** argv){
 	}
 
 	child_pid = fork();
-	if(child_pid == -1)
-	{
+	if(child_pid == -1){
 		perror("Fork error\n");
 		safe_exit();
 	}
