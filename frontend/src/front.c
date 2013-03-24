@@ -616,6 +616,7 @@ int main(int argc, char** argv){
 	fd_set rfds;
 	int retval, ntowrite, nfds=0;
 	fclose(child_writer_pipe[1]);
+	fclose(writer_main_pipe[1]);
 	SET_FL(CHILD_WRITER_PIPE[0], O_NONBLOCK);
 	while(1){
 		FD_ZERO(&rfds);
@@ -683,6 +684,7 @@ int main(int argc, char** argv){
 		.sa_flags = 0
 	};
 	fclose(child_writer_pipe[0]);
+	fclose(writer_main_pipe[0]);
 	sigaction(SIGCHLD, &sigact, NULL);
 	sigaction(SIGTERM, &sigact, NULL);
 	while(1){
