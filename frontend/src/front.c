@@ -56,12 +56,12 @@
 	int     val;\
 	if ((val = fcntl((fd), F_GETFL, 0)) < 0){\
 		perror("\n\rfcntl F_GETFL error");\
-		safe_exit(1);\
+		safe_exit(0);\
 	}\
 	val |= (flags);\
 	if (fcntl((fd), F_SETFL, val) < 0){\
 		perror("\n\rfcntl F_SETFL error");\
-		safe_exit(1);\
+		safe_exit(0);\
 	}\
 }
 
@@ -115,7 +115,7 @@ void waitstate(pid_t matchpid, char matchstate){
 			fclose(child_stat);
 		}else{
 			perror("\n\rwaitstate: get the state of process error");
-			safe_exit(1);
+			safe_exit(0);
 		}
 	}
 }
@@ -306,7 +306,7 @@ size_t write_utf8(exchar* utf8leading, FILE* stream){
 	buf[i] = '\0';
 	if(i != utf8bytes(ch)){
 		perror("\n\rwrite_utf8: illegal utf8 charater");
-		safe_exit(1);
+		safe_exit(0);
 	}
 	return fwrite(buf, i, 1, stream);
 }
@@ -432,7 +432,7 @@ int utf8width(char * utf8leading){
 	for(i = 1;i <= utf8bytes(*utf8leading) - 1; i++){
 		if(!UTF8TRAILING(buf[i])){
 			perror("\n\rutf8width: not a legal UTF8 character");
-			safe_exit(1);
+			safe_exit(0);
 		}
 	}
 	utf8proc_iterate(buf, sizeof(buf), &ucs);
@@ -497,7 +497,7 @@ int utf8_valid_char(char ch){
 	
 	case -1:
 	perror("\n\rutf8_valid_char: unknown utf8 character\n");
-	safe_exit(1);
+	safe_exit(0);
 	break;
 	
 	default:
@@ -571,7 +571,7 @@ int main(int argc, char** argv){
 	if(pipe(CHILD_MAIN_PIPE) == -1)
 	{
 		perror("\n\rError creating pipe");
-		safe_exit(1);
+		safe_exit(0);
 	}else{
 		child_main_pipe[0] = fdopen(CHILD_MAIN_PIPE[0], "r");
 		child_main_pipe[1] = fdopen(CHILD_MAIN_PIPE[1], "w");
@@ -580,7 +580,7 @@ int main(int argc, char** argv){
 	if(pipe(WRITER_MAIN_PIPE) == -1)
 	{
 		perror("\n\rError creating pipe");
-		safe_exit(1);
+		safe_exit(0);
 	}else{
 		writer_main_pipe[0] = fdopen(WRITER_MAIN_PIPE[0], "r");
 		writer_main_pipe[1] = fdopen(WRITER_MAIN_PIPE[1], "w");
@@ -621,11 +621,12 @@ int main(int argc, char** argv){
 	while(1){
 		FD_ZERO(&rfds);
 		FD_SET(CHILD_WRITER_PIPE[0], &rfds);
-		nfds = max(nfds, CHILD_WRITER_PIPE[0]);
+		FD_SET(WRITER_MAIN_PIPE[0], &rfds);
+		nfds = max(WRITER_MAIN_PIPE[0], CHILD_WRITER_PIPE[0]);
 		retval = select(1+nfds, &rfds, NULL, NULL, NULL);
 		if (retval == -1){
 			perror("select()");
-			safe_exit(1);
+			safe_exit(0);
 		}
 		if(FD_ISSET(CHILD_WRITER_PIPE[0], &rfds)){
 			while(1){
@@ -657,6 +658,8 @@ int main(int argc, char** argv){
 			}
 			fflush(stdout);
 		}
+		if(FD_ISSET(WRITER_MAIN_PIPE[0], &rfds)){
+		}
 	}
 	/*********/
 	}else{
@@ -664,7 +667,7 @@ int main(int argc, char** argv){
 	child_pid = fork();
 	if(child_pid == -1){
 		perror("Fork error\n");
-		safe_exit(1);
+		safe_exit(0);
 	}
 	/*************/
 	if(child_pid == 0){
@@ -691,7 +694,7 @@ int main(int argc, char** argv){
 		c=getchar();
 		switch(c){
 		case EOT:
-		safe_exit(1);
+		safe_exit(0);
 		break;
 		
 		case '\x7F':
