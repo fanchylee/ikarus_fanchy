@@ -56,15 +56,16 @@
 	int     val;\
 	if ((val = fcntl((fd), F_GETFL, 0)) < 0){\
 		perror("\n\rfcntl F_GETFL error");\
-		safe_exit();\
+		safe_exit(1);\
 	}\
 	val |= (flags);\
 	if (fcntl((fd), F_SETFL, val) < 0){\
 		perror("\n\rfcntl F_SETFL error");\
-		safe_exit();\
+		safe_exit(1);\
 	}\
 }
 
+void safe_exit(int sig);
 typedef struct _curP{
 	int x ;
 	int y ;
@@ -99,6 +100,7 @@ int WRITER_MAIN_PIPE[2];
 FILE* child_main_pipe[2] ;
 FILE* child_writer_pipe[2];
 FILE* writer_main_pipe[2];
+
 void waitstate(pid_t matchpid, char matchstate){
 	char filename[256], state;
 	pid_t pid;
@@ -113,7 +115,7 @@ void waitstate(pid_t matchpid, char matchstate){
 			fclose(child_stat);
 		}else{
 			perror("\n\rwaitstate: get the state of process error");
-			safe_exit();
+			safe_exit(1);
 		}
 	}
 }
@@ -304,7 +306,7 @@ size_t write_utf8(exchar* utf8leading, FILE* stream){
 	buf[i] = '\0';
 	if(i != utf8bytes(ch)){
 		perror("\n\rwrite_utf8: illegal utf8 charater");
-		safe_exit();
+		safe_exit(1);
 	}
 	return fwrite(buf, i, 1, stream);
 }
@@ -430,7 +432,7 @@ int utf8width(char * utf8leading){
 	for(i = 1;i <= utf8bytes(*utf8leading) - 1; i++){
 		if(!UTF8TRAILING(buf[i])){
 			perror("\n\rutf8width: not a legal UTF8 character");
-			safe_exit();
+			safe_exit(1);
 		}
 	}
 	utf8proc_iterate(buf, sizeof(buf), &ucs);
@@ -495,7 +497,7 @@ int utf8_valid_char(char ch){
 	
 	case -1:
 	perror("\n\rutf8_valid_char: unknown utf8 character\n");
-	safe_exit();
+	safe_exit(1);
 	break;
 	
 	default:
@@ -557,6 +559,7 @@ int utf8_valid_char(char ch){
 
 int main(int argc, char** argv){
 	char c;
+	/* pipe */
 	if(pipe(CHILD_WRITER_PIPE) == -1)
 	{
 		perror("\n\rError creating pipe");
@@ -564,8 +567,26 @@ int main(int argc, char** argv){
 	}else{
 		child_writer_pipe[0] = fdopen(CHILD_WRITER_PIPE[0], "r");
 		child_writer_pipe[1] = fdopen(CHILD_WRITER_PIPE[1], "w");
-//		setbuf(child_writer_pipe[1], NULL);
 	}
+
+	if(pipe(CHILD_MAIN_PIPE) == -1)
+	{
+		perror("\n\rError creating pipe");
+		safe_exit(1);
+	}else{
+		child_main_pipe[0] = fdopen(CHILD_MAIN_PIPE[0], "r");
+		child_main_pipe[1] = fdopen(CHILD_MAIN_PIPE[1], "w");
+	}
+	
+	if(pipe(WRITER_MAIN_PIPE) == -1)
+	{
+		perror("\n\rError creating pipe");
+		safe_exit(1);
+	}else{
+		writer_main_pipe[0] = fdopen(WRITER_MAIN_PIPE[0], "r");
+		writer_main_pipe[1] = fdopen(WRITER_MAIN_PIPE[1], "w");
+	}
+	/************/
 	writer_pid = fork();
 	if(writer_pid == -1){
 		perror("Fork write_pid error\n");
@@ -587,7 +608,7 @@ int main(int argc, char** argv){
 		retval = select(1+nfds, &rfds, NULL, NULL, NULL);
 		if (retval == -1){
 			perror("select()");
-			safe_exit();
+			safe_exit(1);
 		}
 		if(FD_ISSET(CHILD_WRITER_PIPE[0], &rfds)){
 			while(1){
@@ -642,19 +663,12 @@ int main(int argc, char** argv){
 		printf("init successed x:%d y%d\n\r", cur_expr->cur_start.x  ,cur_expr->cur_start.y);
 	}
 
-	if(pipe(CHILD_MAIN_PIPE) == -1)
-	{
-		perror("\n\rError creating pipe");
-		safe_exit();
-	}else{
-		child_main_pipe[0] = fdopen(CHILD_MAIN_PIPE[0], "r");
-		child_main_pipe[1] = fdopen(CHILD_MAIN_PIPE[1], "w");
-	}
+	
 
 	child_pid = fork();
 	if(child_pid == -1){
 		perror("Fork error\n");
-		safe_exit();
+		safe_exit(1);
 	}
 	if(child_pid == 0){ 
 	/* child process*/
@@ -666,11 +680,12 @@ int main(int argc, char** argv){
 	/************/
 	}else{
 	close(CHILD_MAIN_PIPE[0]);
+	signal(SIGCHLD, safe_exit);
 	while(1){
 		c=getchar();
 		switch(c){
 		case EOT:
-		safe_exit();
+		safe_exit(1);
 		break;
 		
 		case '\x7F':
@@ -687,32 +702,7 @@ int main(int argc, char** argv){
 		}
 	}}}
 }
-int safe_exit(){
-	exexpr *temp1 ;
-	exexpr *temp2 ;
-	temp1 = cur_expr->parent;
-	while(temp1 != NULL){
-		temp2 = temp1 ;
-		temp1 = temp1->parent ;
-		free(temp2->ech );
-		free(temp2);
-	}
-	temp1 = cur_expr->child;
-	while(temp1 != NULL){
-		temp2 = temp1 ;
-		temp1 = temp1->child ;
-		free(temp2->ech );
-		free(temp2);
-	}
-	free(cur_expr);
-	
-	tcsetattr(STDIN_FILENO, TCSANOW, original_ter);
-	free(original_ter);
-	free(newter);
-	kill(writer_pid, SIGTERM);
-	kill(child_pid, SIGTERM);
-	exit(0);
-}
+
 int escape(){
 	static int state = 0;
 	static char chbuf[4]={'\0','\0','\0','\0'};
@@ -808,4 +798,30 @@ int escape(){
 	break;
 	}
 	chbuf[0]=chbuf[1]=chbuf[2]=chbuf[3]=state=0;
+}
+void safe_exit(int sig){
+	exexpr *temp1 ;
+	exexpr *temp2 ;
+	temp1 = cur_expr->parent;
+	while(temp1 != NULL){
+		temp2 = temp1 ;
+		temp1 = temp1->parent ;
+		free(temp2->ech );
+		free(temp2);
+	}
+	temp1 = cur_expr->child;
+	while(temp1 != NULL){
+		temp2 = temp1 ;
+		temp1 = temp1->child ;
+		free(temp2->ech );
+		free(temp2);
+	}
+	free(cur_expr);
+	
+	tcsetattr(STDIN_FILENO, TCSANOW, original_ter);
+	free(original_ter);
+	free(newter);
+	kill(writer_pid, SIGTERM);
+	kill(child_pid, SIGTERM);
+	exit(0);
 }
