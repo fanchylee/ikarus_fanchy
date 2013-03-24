@@ -56,12 +56,12 @@
 	int     val;\
 	if ((val = fcntl((fd), F_GETFL, 0)) < 0){\
 		perror("\n\rfcntl F_GETFL error");\
-		safe_exit(1);\
+		safe_exit(0);\
 	}\
 	val |= (flags);\
 	if (fcntl((fd), F_SETFL, val) < 0){\
 		perror("\n\rfcntl F_SETFL error");\
-		safe_exit(1);\
+		safe_exit(0);\
 	}\
 }
 
@@ -115,7 +115,7 @@ void waitstate(pid_t matchpid, char matchstate){
 			fclose(child_stat);
 		}else{
 			perror("\n\rwaitstate: get the state of process error");
-			safe_exit(1);
+			safe_exit(0);
 		}
 	}
 }
@@ -306,7 +306,7 @@ size_t write_utf8(exchar* utf8leading, FILE* stream){
 	buf[i] = '\0';
 	if(i != utf8bytes(ch)){
 		perror("\n\rwrite_utf8: illegal utf8 charater");
-		safe_exit(1);
+		safe_exit(0);
 	}
 	return fwrite(buf, i, 1, stream);
 }
@@ -432,7 +432,7 @@ int utf8width(char * utf8leading){
 	for(i = 1;i <= utf8bytes(*utf8leading) - 1; i++){
 		if(!UTF8TRAILING(buf[i])){
 			perror("\n\rutf8width: not a legal UTF8 character");
-			safe_exit(1);
+			safe_exit(0);
 		}
 	}
 	utf8proc_iterate(buf, sizeof(buf), &ucs);
@@ -497,7 +497,7 @@ int utf8_valid_char(char ch){
 	
 	case -1:
 	perror("\n\rutf8_valid_char: unknown utf8 character\n");
-	safe_exit(1);
+	safe_exit(0);
 	break;
 	
 	default:
@@ -572,7 +572,7 @@ int main(int argc, char** argv){
 	if(pipe(CHILD_MAIN_PIPE) == -1)
 	{
 		perror("\n\rError creating pipe");
-		safe_exit(1);
+		safe_exit(0);
 	}else{
 		child_main_pipe[0] = fdopen(CHILD_MAIN_PIPE[0], "r");
 		child_main_pipe[1] = fdopen(CHILD_MAIN_PIPE[1], "w");
@@ -581,12 +581,30 @@ int main(int argc, char** argv){
 	if(pipe(WRITER_MAIN_PIPE) == -1)
 	{
 		perror("\n\rError creating pipe");
-		safe_exit(1);
+		safe_exit(0);
 	}else{
 		writer_main_pipe[0] = fdopen(WRITER_MAIN_PIPE[0], "r");
 		writer_main_pipe[1] = fdopen(WRITER_MAIN_PIPE[1], "w");
 	}
 	/************/
+	newter=(struct termios *)malloc(sizeof(struct termios)) ;
+	original_ter=(struct termios *)malloc(sizeof(struct termios)) ;
+	
+
+	tcgetattr(STDIN_FILENO, original_ter);
+	cfmakeraw(newter);
+	newter->c_oflag |= ONLCR;
+	tcsetattr(STDIN_FILENO, TCSANOW, newter);
+	//setbuf(stdin,NULL);
+	{
+		cur_expr = (exexpr*)malloc(sizeof(exexpr));
+		cur_expr->len = 0 ;
+		cur_expr->position = 0 ;
+		cur_expr->ech = (exchar*)malloc(sizeof(exchar));
+		cur_expr->ech[0].ch = '\0';
+		cur_expr->cur_start = initcurP();
+		printf("init successed x:%d y%d\n\r", cur_expr->cur_start.x  ,cur_expr->cur_start.y);
+	}
 	writer_pid = fork();
 	if(writer_pid == -1){
 		perror("Fork write_pid error\n");
@@ -608,7 +626,7 @@ int main(int argc, char** argv){
 		retval = select(1+nfds, &rfds, NULL, NULL, NULL);
 		if (retval == -1){
 			perror("select()");
-			safe_exit(1);
+			safe_exit(0);
 		}
 		if(FD_ISSET(CHILD_WRITER_PIPE[0], &rfds)){
 			while(1){
@@ -644,31 +662,10 @@ int main(int argc, char** argv){
 	/*********/
 	}else{
 	/*main process*/
-	newter=(struct termios *)malloc(sizeof(struct termios)) ;
-	original_ter=(struct termios *)malloc(sizeof(struct termios)) ;
-	
-
-	tcgetattr(STDIN_FILENO, original_ter);
-	cfmakeraw(newter);
-	newter->c_oflag |= ONLCR;
-	tcsetattr(STDIN_FILENO, TCSANOW, newter);
-	//setbuf(stdin,NULL);
-	{
-		cur_expr = (exexpr*)malloc(sizeof(exexpr));
-		cur_expr->len = 0 ;
-		cur_expr->position = 0 ;
-		cur_expr->ech = (exchar*)malloc(sizeof(exchar));
-		cur_expr->ech[0].ch = '\0';
-		cur_expr->cur_start = initcurP();
-		printf("init successed x:%d y%d\n\r", cur_expr->cur_start.x  ,cur_expr->cur_start.y);
-	}
-
-	
-
 	child_pid = fork();
 	if(child_pid == -1){
 		perror("Fork error\n");
-		safe_exit(1);
+		safe_exit(0);
 	}
 	if(child_pid == 0){ 
 	/* child process*/
@@ -679,13 +676,20 @@ int main(int argc, char** argv){
 	execlp("ikarus", "ikarus", /*"--quiet", */NULL);
 	/************/
 	}else{
+	/*main process*/
+	struct sigaction sigact = {
+		.sa_handler = safe_exit,
+		.sa_mask = sigemptyset(&sigact.sa_mask),
+		.sa_flags = 0
+	};
 	close(CHILD_MAIN_PIPE[0]);
-	signal(SIGCHLD, safe_exit);
+	sigaction(SIGCHLD, &sigact, NULL);
+	sigaction(SIGTERM, &sigact, NULL);
 	while(1){
 		c=getchar();
 		switch(c){
 		case EOT:
-		safe_exit(1);
+		safe_exit(0);
 		break;
 		
 		case '\x7F':
@@ -700,7 +704,9 @@ int main(int argc, char** argv){
 		utf8_valid_char(c);
 		break;
 		}
-	}}}
+	}
+	/***********/
+	}}
 }
 
 int escape(){
