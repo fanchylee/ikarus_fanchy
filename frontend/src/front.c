@@ -658,8 +658,38 @@ int main(int argc, char** argv){
 			}
 			fflush(stdout);
 		}
+/*
 		if(FD_ISSET(WRITER_MAIN_PIPE[0], &rfds)){
+			while(1){
+				memset(buf2, 0, sizeof(buf2));
+				memset(buf, 0, sizeof(buf));
+				errno = 0;
+				ntowrite = fread(buf, 1, sizeof(buf), child_writer_pipe[0]);
+				for(k = j = i = 0;i<ntowrite; i++){
+					if(buf[i] != '\n'){
+					}else{
+						memcpy(buf2+k, buf+j, i-j+1);
+						buf2[k+i-j+1] = '\r';
+						k=k+i-j+2 ;
+						j=i+1;
+					}
+					
+				}
+				memcpy(buf2+k, buf+j, i-j);
+				if(ntowrite > 0){
+					fwrite(buf2, strlen(buf2), 1, stdout);
+				}else {
+					if(errno == EAGAIN){
+						break ;
+					}else{
+						fprintf(stderr, "other exception\n\r");
+						continue ;
+					}
+				}
+			}
+			fflush(stdout);
 		}
+*/
 	}
 	/*********/
 	}else{
@@ -672,10 +702,11 @@ int main(int argc, char** argv){
 	/*************/
 	if(child_pid == 0){
 	/* child process*/
-	dup2(CHILD_MAIN_PIPE[0], STDIN_FILENO);
 	fclose(child_main_pipe[1]);
-	dup2(CHILD_WRITER_PIPE[1], STDOUT_FILENO);
 	fclose(child_writer_pipe[0]);
+	dup2(CHILD_MAIN_PIPE[0], STDIN_FILENO);
+	dup2(CHILD_WRITER_PIPE[1], STDOUT_FILENO);
+	dup2(CHILD_WRITER_PIPE[1], STDERR_FILENO);
 	execlp("ikarus", "ikarus", /*"--quiet", */NULL);
 	/************/
 	}else{
@@ -690,6 +721,7 @@ int main(int argc, char** argv){
 	fclose(writer_main_pipe[0]);
 	sigaction(SIGCHLD, &sigact, NULL);
 	sigaction(SIGTERM, &sigact, NULL);
+	sigaction(SIGABRT, &sigact, NULL);
 	while(1){
 		c=getchar();
 		switch(c){
