@@ -135,7 +135,7 @@ register_handlers(){
   sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
 #endif
   sigemptyset(&sa.sa_mask);
-  int err = sigaction(SIGINT, &sa, 0);
+  int err = sigaction(SIGINT, &sa, NULL);
   if(err){
     fprintf(stderr, "Sigaction Failed: %s\n", strerror(errno));
     exit(-1);

@@ -545,12 +545,19 @@ int utf8_valid_char(char ch){
 		register int i ;
 		char* buf = malloc(cur_expr->len + 5);
 		memset(buf, 0, cur_expr->len + 5);
+/*
 		buf[cur_expr->len - 1] = '\n' ;
 		for(i = cur_expr->len - 2;cur_expr->ech[i].ch != '\n' && i >= 0; i--){
 			buf[i] = cur_expr->ech[i].ch ;
 		}
 		fwrite(buf + i + 1 , strlen(buf + i + 1), 1, child_main_pipe[1]);
+*/
 		/*TODO make another cur_expr*/
+		for(i = 0; i < cur_expr->len; i++){
+			buf[i] = cur_expr->ech[i].ch ;
+		}
+		fwrite(buf, strlen(buf), 1, child_main_pipe[1]);
+		
 		fflush(child_main_pipe[1]);
 		free(buf);
 		waitstate(child_pid, 'S');
@@ -845,25 +852,27 @@ int escape(){
 void safe_exit(int sig){
 	exexpr *temp1 ;
 	exexpr *temp2 ;
-	temp1 = cur_expr->parent;
-	while(temp1 != NULL){
-		temp2 = temp1 ;
-		temp1 = temp1->parent ;
-		free(temp2->ech );
-		free(temp2);
+	if(cur_expr != NULL){
+		temp1 = cur_expr->parent;
+		while(temp1 != NULL){
+			temp2 = temp1 ;
+			temp1 = temp1->parent ;
+			free(temp2->ech );
+			free(temp2);
+		}
+		temp1 = cur_expr->child;
+		while(temp1 != NULL){
+			temp2 = temp1 ;
+			temp1 = temp1->child ;
+			free(temp2->ech );
+			free(temp2);
+		}
 	}
-	temp1 = cur_expr->child;
-	while(temp1 != NULL){
-		temp2 = temp1 ;
-		temp1 = temp1->child ;
-		free(temp2->ech );
-		free(temp2);
-	}
-	free(cur_expr);
+	free(cur_expr);cur_expr=NULL;
 	
 	tcsetattr(STDIN_FILENO, TCSANOW, original_ter);
-	free(original_ter);
-	free(newter);
+	free(original_ter);original_ter = NULL;
+	free(newter);newter = NULL;
 	kill(writer_pid, SIGTERM);
 	kill(child_pid, SIGTERM);
 	exit(0);
