@@ -559,7 +559,7 @@ int utf8_valid_char(char ch){
 		fwrite(buf, strlen(buf), 1, child_main_pipe[1]);
 		
 		fflush(child_main_pipe[1]);
-		free(buf);
+		free(buf);buf = NULL ;
 		waitstate(child_pid, 'S');
 	}
 }
@@ -623,7 +623,7 @@ int main(int argc, char** argv){
 	fd_set rfds;
 	int retval, ntowrite, nfds=0;
 	fclose(child_writer_pipe[1]);
-	fclose(writer_main_pipe[1]);
+	fclose(writer_main_pipe[0]);
 	SET_FL(CHILD_WRITER_PIPE[0], O_NONBLOCK);
 	while(1){
 		FD_ZERO(&rfds);
@@ -637,17 +637,18 @@ int main(int argc, char** argv){
 		}
 		if(FD_ISSET(CHILD_WRITER_PIPE[0], &rfds)){
 			while(1){
+				char c = buf2[strlen(buf2) - 1];
 				memset(buf2, 0, sizeof(buf2));
 				memset(buf, 0, sizeof(buf));
 				errno = 0;
 				ntowrite = fread(buf, 1, sizeof(buf), child_writer_pipe[0]);
 				for(k = j = i = 0;i<ntowrite; i++){
-					if(buf[i] != '\n'){
-					}else{
+					if(buf[i] == '\n'){
 						memcpy(buf2+k, buf+j, i-j+1);
 						buf2[k+i-j+1] = '\r';
 						k=k+i-j+2 ;
 						j=i+1;
+					}else{
 					}
 					
 				}
@@ -656,6 +657,10 @@ int main(int argc, char** argv){
 					fwrite(buf2, strlen(buf2), 1, stdout);
 				}else {
 					if(errno == EAGAIN){
+						if(c = '>'){
+							fwrite("c", 1, 1, writer_main_pipe[1]);
+							fflush(writer_main_pipe[1]);
+						}
 						break ;
 					}else{
 						fprintf(stderr, "other exception\n\r");
@@ -725,7 +730,7 @@ int main(int argc, char** argv){
 		.sa_flags = 0
 	};
 	fclose(child_writer_pipe[0]);
-	fclose(writer_main_pipe[0]);
+	fclose(writer_main_pipe[1]);
 	sigaction(SIGCHLD, &sigact, NULL);
 	sigaction(SIGTERM, &sigact, NULL);
 	sigaction(SIGABRT, &sigact, NULL);

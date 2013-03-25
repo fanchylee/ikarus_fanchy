@@ -33,9 +33,11 @@ description:
   
   If an die occurs during reading, evaluating, or printing an
   expression, then the die is printed to the error-port and the
-  operations of the cafe resume as normal.|#
+  operations of the cafe resume as normal.
+|#
 #|FIXME:new-cafe
-  Be specific about what the error-port is |#
+  Be specific about what the error-port is 
+|#
 
 (library (ikarus cafe)
   (export new-cafe waiter-prompt-string)
@@ -45,8 +47,8 @@ description:
 
   (define eval-depth 0)
 
-  (define prompt-string ">");;original ">"
-  (define prompt-string2 "");;original " "
+  (define prompt-string "\x1b;[31;1m>\x1b;[0m");;original ">"
+  (define prompt-string2 "\x1b;[32;1m>\x1b;[0m");;original " "
   (define waiter-prompt-string
     (make-parameter prompt-string
       (lambda (x)
@@ -86,7 +88,8 @@ description:
                       (reset k)]
                      [else (raise-continuable ex)]))
                  (lambda ()
-                   (read (console-input-port))))])
+                     [read (console-input-port)]
+                     ))])
         (cond
 		;;;here is the function [when press Ctrl-D , (exit)]
           [(eof-object? x) 
