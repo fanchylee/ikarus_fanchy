@@ -48,7 +48,7 @@ description:
   (define eval-depth 0)
 
   (define waiter-prompt-string
-    (make-parameter "\x1b;[31;1m>\x1b;[0m";;original ">"
+    (make-parameter "\x1b;[31;1m>\x1b;[0m";;red ">", original ">"
       (lambda (x)
         (if (string? x)
             x
@@ -57,7 +57,8 @@ description:
   (define display-prompt
     (lambda (i)
       (if (fx= i eval-depth)
-          (display "\x1b;[32;1m>\x1b;[0m" (console-output-port))
+          (display "\x1b;[32;1m>\x1b;[0m";;green ">", original " "
+            (console-output-port))
           (begin
             (display (waiter-prompt-string) (console-output-port))
             (display-prompt (fx+ i 1))))))

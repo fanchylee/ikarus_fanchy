@@ -1348,7 +1348,8 @@
                      ($set-port-index! p (fx+ i 1))
                      (if (eqv? b (char->integer #\newline))
                          (mark/return-newline p)
-                         (integer->char b))]
+                         (integer->char b) 
+			)]
                     [else (get-char-utf8-mode p who)]))]
                [else
                 (get-char-utf8-mode p who)]))]

@@ -392,7 +392,7 @@
 
 
 (library (ikarus generic-arithmetic)
-  (export + - * / zero? = < <= > >= add1 sub1 quotient remainder
+  (export + - * / zero? = < <= > >= add1 sub1 quotient remainder;;;add **(dot product) 
           modulo even? odd? bitwise-and bitwise-not bitwise-ior
           bitwise-xor bitwise-if
           bitwise-arithmetic-shift-right bitwise-arithmetic-shift-left 
@@ -1000,6 +1000,9 @@
 	[else (die 'binarymethodof+ "not defined" (list n m))]))
 
 (define (binarylist+ n m)
+	(map binarymethodof+ n m))
+#|
+(define (binarylist+ n m)
 	(cond 
 	[(and [not (null? n)] [not (null? m)]) 
 		(let f	
@@ -1009,11 +1012,11 @@
 		(cond
 		[(and (null? n) (null? m)) ac]
 		[(and [not (null? n)] [not (null? m)])
-			(f [cons (car ac) (cons [+ (car n) (car m)] '())] [cdr n] [cdr m])]
+			(f [append ac (cons [+ (car n) (car m)] '())] [cdr n] [cdr m])]
 		[else (die '+ "argument not matched" (list n m))]))]
 	[(and (null? n) (null? m)) (die 'binarylist+ "cannot add two empty lists" (list n m))]
 	[else (die '+ "argument not matched" (list n m))]))
-
+|#
   (define bitwise-and
     (case-lambda
       [(x y) (binary-bitwise-and x y)]
@@ -1112,7 +1115,7 @@
          (cond
            [(null? e*) ac]
            [else (f (binary- ac (car e*)) (cdr e*))]))]))
-
+;;;* is a arithmetic operation that produces an object with the same structure as its arguments
 (define	*
 	(case-lambda
 	[(n m) (binarymethodof* n m)]
@@ -1127,23 +1130,54 @@
 	[(n) (binarymethodof* 1 n)]
 	[() 1]))
 
-(define (binarymethodof* n m)
-	(cond
-	[(and (number? n) (number? m)) (binary* n m)] 
-	[(or (null? n) (null? m)) (die 'binarymethodof* "the argument cannot be empty list" (list n m))]
-	[(and (number? n) (list? m)) (scale* n m)]
-	[(and (number? m) (list? n)) (scale* m n)]
-	[else (die 'binarymethodof* "not defined" (list n m))]))
 
-(define (scale* n m)
-	;(if (not (number? n)) (die 'scale* "first argument must be number" n))
-	;(if (or (null? m) (not (list? m))) (die 'scale* "second argument should be nonempty list" m))
+(define (binarymethodof* bn m)
+	(cond
+	[(and (number? bn) (number? m)) (binary* bn m)] 
+	[(or (null? bn) (null? m)) (die 'binarymethodof* "the argument cannot be empty list" (list bn m))]
+	[(and (number? bn) (list? m)) (scalar* bn m)]
+	[(and (number? m) (list? bn)) (scalar* m bn)]
+	[(and (list? bn) (list? m)) (binarylist* bn m)]
+	[else (die 'binarymethodof* "not defined" (list bn m))]))
+
+(define (binaryapply proc procn1 procn2 nulln? n procm1 procm2 nullm? m)
+	(cond 
+	[(and [not (null? n)] [not (null? m)]) 
+		(let f	
+		([ac (cons (proc (procn1 n) (procm1 m)) '())]
+		[n (procn2 n)]
+		[m (procm2 m)])
+		(cond
+		[(and (null? n) (null? m)) ac]
+		[(and [not (null? n)] [not (null? m)])
+			(f [append ac (cons [proc (procn1 n) (procm1 m)] '())] [procn2 n] [procm2 m])]
+		[else (die proc "argument not matched" (list n m))]))]
+	[(and (null? n) (null? m)) (die proc "two empty lists" (list n m))]
+	[else (die proc "argument not matched" (list n m))]))
+
+#|
+(define (scalar* n m)
+	;(if (not (number? n)) (die 'scalar* "first argument must be number" n))
+	;(if (or (null? m) (not (list? m))) (die 'scalar* "second argument should be nonempty list" m))
 	(let f ([ac (cons (binarymethodof* n (car m)) '())] [m (cdr m)])
 		(cond
 		[(null? m) ac]
-		[else (f (cons (car ac) [cons (binarymethodof* n (car m)) '()]) [cdr m])])))
+		[else (f (append ac [cons (binarymethodof* n (car m)) '()]) [cdr m])])))
+|#
+;;;scalar* is an operation that produces an object with the same structure with the second argument
+(define (scalar* n m)
+	(map (lambda (x) (* n x)) m))
 
-(define (binarylistdot* n m)
+(define (scalarapply proc n procm1 procm2 m)
+	(let f ([ac (cons (proc n (procm1 m)) '())] [m (procm2 m)])
+		(cond
+		[(null? m) ac]
+		[else (f (append ac [cons (proc n (procm1 m)) '()]) [procm2 m])])))
+
+(define (binarylist* n m)
+	(map binarymethodof* n m))
+#|
+(define (** n m)
 	(cond 
 	[(and [not (null? n)] [not (null? m)]) 
 		(let f	
@@ -1153,11 +1187,12 @@
 		(cond
 		[(and (null? n) (null? m)) ac]
 		[(and [not (null? n)] [not (null? m)])
-			(f [cons (car ac) (cons [* (car n) (car m)] '())] [cdr n] [cdr m])]
+			(f [append ac (cons [* (car n) (car m)] '())] [cdr n] [cdr m])]
 		[else (die 'binarylistdot* "argument not matched" (list n m))]))]
 	[(and (null? n) (null? m)) (die 'binarylistdot* "cannot add two empty lists" (list n m))]
 	[else (die 'binarylistdot* "argument not matched" (list n m))]))
 
+|#
 
 
   (define (binary-gcd x y) 
